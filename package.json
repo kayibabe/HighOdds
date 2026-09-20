@@ -1,0 +1,29 @@
+{
+  "name": "highodds",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "db:generate": "npm run db:generate --workspace=@highodds/db",
+    "db:migrate": "npm run db:migrate --workspace=@highodds/db"
+  },
+  "devDependencies": {
+    "@prisma/client": "^6.19.3",
+    "prisma": "^6.19.3"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "allowScripts": {
+    "@prisma/engines": true,
+    "prisma": true,
+    "@prisma/client@6.19.3": true,
+    "esbuild": true
+  }
+}

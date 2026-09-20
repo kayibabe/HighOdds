@@ -1,0 +1,17 @@
+{
+  "name": "@highodds/jobs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "jobs:run-due": "tsx src/run-due.ts",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@highodds/core": "*",
+    "@highodds/db": "*",
+    "tsx": "^4.19.3",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": { "typescript": "^5.7.3", "@types/node": "^22.13.10" }
+}

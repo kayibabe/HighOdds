@@ -1,0 +1,8 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "deploy": {
+    "startCommand": "npm run jobs:run-due --workspace=@highodds/jobs",
+    "restartPolicyType": "NEVER",
+    "cronSchedule": "*/5 * * * *"
+  }
+}

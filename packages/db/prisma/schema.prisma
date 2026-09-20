@@ -1,0 +1,311 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  SUBSCRIBER
+}
+
+enum JobStatus {
+  DUE
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum FixtureStatus {
+  SCHEDULED
+  LIVE
+  FINISHED
+  POSTPONED
+  CANCELLED
+}
+
+enum TicketTier {
+  STANDARD
+  VALUE
+  HIGH
+}
+
+enum TicketStatus {
+  PUBLISHED
+  SETTLED
+  VOID
+}
+
+enum SettlementOutcome {
+  WIN
+  LOSS
+  VOID
+  PENDING
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String?
+  email     String   @unique
+  emailVerified DateTime?
+  image     String?
+  role      UserRole @default(SUBSCRIBER)
+  activeTo  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  auditLogs AuditLog[]
+  accounts  Account[]
+  sessions  Session[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model AdminCredential {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model JobRun {
+  id             String    @id @default(cuid())
+  idempotencyKey String    @unique
+  jobType        String
+  runAfter       DateTime
+  status         JobStatus @default(DUE)
+  attempts       Int       @default(0)
+  claimedAt      DateTime?
+  leaseExpiresAt DateTime?
+  completedAt    DateTime?
+  lastError      String?
+  payload        Json      @default("{}")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, runAfter])
+  @@index([leaseExpiresAt])
+}
+
+model ApiQuotaUsage {
+  id           String   @id @default(cuid())
+  usageDate    DateTime @unique @db.Date
+  requestCount Int      @default(0)
+  quotaLimit   Int
+  safetyPercent Int     @default(90)
+  degradedAt   DateTime?
+  updatedAt    DateTime @updatedAt
+}
+
+model RawProviderPayload {
+  id           String   @id @default(cuid())
+  endpoint     String
+  requestKey   String
+  page         Int
+  receivedAt   DateTime @default(now())
+  providerUpdatedAt DateTime?
+  body         Json
+
+  @@unique([endpoint, requestKey, page, receivedAt])
+  @@index([endpoint, requestKey])
+}
+
+model Competition {
+  id         String    @id @default(cuid())
+  providerId Int       @unique
+  name       String
+  country    String?
+  fixtures   Fixture[]
+  createdAt  DateTime  @default(now())
+}
+
+model Team {
+  id         String    @id @default(cuid())
+  providerId Int       @unique
+  name       String
+  homeFixtures Fixture[] @relation("home_team")
+  awayFixtures Fixture[] @relation("away_team")
+}
+
+model Fixture {
+  id          String        @id @default(cuid())
+  providerId  Int           @unique
+  competitionId String
+  homeTeamId  String
+  awayTeamId  String
+  kickoff     DateTime
+  status      FixtureStatus @default(SCHEDULED)
+  homeGoals   Int?
+  awayGoals   Int?
+  receivedAt  DateTime      @default(now())
+  competition Competition   @relation(fields: [competitionId], references: [id])
+  homeTeam    Team          @relation("home_team", fields: [homeTeamId], references: [id])
+  awayTeam    Team          @relation("away_team", fields: [awayTeamId], references: [id])
+  quotes      OddsQuote[]
+  predictions Prediction[]
+  ticketLegs  TicketLeg[]
+
+  @@index([kickoff, status])
+  @@index([competitionId, kickoff])
+}
+
+model Bookmaker {
+  id         String      @id @default(cuid())
+  providerId Int         @unique
+  name       String
+  priority   Int         @default(999)
+  active     Boolean     @default(false)
+  quotes     OddsQuote[]
+}
+
+model Market {
+  id          String      @id @default(cuid())
+  providerId  Int         @unique
+  name        String
+  normalizedKey String?
+  selectionEnabled Boolean @default(false)
+  quotes      OddsQuote[]
+  predictions Prediction[]
+}
+
+model OddsQuote {
+  id                String   @id @default(cuid())
+  fixtureId         String
+  bookmakerId       String
+  marketId          String
+  selection         String
+  decimalOdds       Decimal  @db.Decimal(10, 4)
+  providerUpdatedAt DateTime?
+  capturedAt        DateTime
+  receivedAt        DateTime @default(now())
+  rawPayloadId      String?
+  fixture           Fixture  @relation(fields: [fixtureId], references: [id])
+  bookmaker         Bookmaker @relation(fields: [bookmakerId], references: [id])
+  market            Market   @relation(fields: [marketId], references: [id])
+
+  @@index([fixtureId, capturedAt])
+  @@index([bookmakerId, marketId, selection])
+}
+
+model ModelRun {
+  id          String   @id @default(cuid())
+  version     String
+  method      String
+  trainedUntil DateTime
+  artifact    Json
+  createdAt   DateTime @default(now())
+  predictions Prediction[]
+}
+
+model Prediction {
+  id          String   @id @default(cuid())
+  fixtureId   String
+  marketId    String
+  selection   String
+  probability Decimal  @db.Decimal(8, 6)
+  modelRunId  String
+  asOfAt      DateTime
+  fixture     Fixture  @relation(fields: [fixtureId], references: [id])
+  market      Market   @relation(fields: [marketId], references: [id])
+  modelRun    ModelRun @relation(fields: [modelRunId], references: [id])
+
+  @@index([fixtureId, marketId, selection, asOfAt])
+}
+
+model TicketVersion {
+  id            String       @id @default(cuid())
+  targetDate    DateTime     @db.Date
+  tier          TicketTier
+  status        TicketStatus @default(PUBLISHED)
+  bookmakerId   String
+  combinedOdds  Decimal      @db.Decimal(12, 4)
+  confidenceThreshold Int
+  relaxed       Boolean      @default(false)
+  publishedAt   DateTime     @default(now())
+  lockAt        DateTime
+  supersedesId  String?
+  decision      Json
+  supersedes    TicketVersion? @relation("ticket_successors", fields: [supersedesId], references: [id])
+  successors    TicketVersion[] @relation("ticket_successors")
+  legs          TicketLeg[]
+  settlements   Settlement[]
+
+  @@index([targetDate, tier, publishedAt])
+  @@index([lockAt])
+}
+
+model TicketLeg {
+  id              String        @id @default(cuid())
+  ticketVersionId String
+  fixtureId       String
+  quoteId         String
+  marketKey       String
+  selection       String
+  decimalOdds     Decimal       @db.Decimal(10, 4)
+  probability     Decimal       @db.Decimal(8, 6)
+  ticketVersion   TicketVersion @relation(fields: [ticketVersionId], references: [id], onDelete: Restrict)
+  fixture         Fixture       @relation(fields: [fixtureId], references: [id])
+
+  @@unique([ticketVersionId, fixtureId])
+  @@index([fixtureId])
+}
+
+model Settlement {
+  id              String            @id @default(cuid())
+  ticketVersionId String
+  outcome         SettlementOutcome @default(PENDING)
+  profitUnits     Decimal?          @db.Decimal(12, 4)
+  settledAt       DateTime?
+  evidence        Json
+  ticketVersion   TicketVersion     @relation(fields: [ticketVersionId], references: [id], onDelete: Restrict)
+  createdAt       DateTime          @default(now())
+
+  @@unique([ticketVersionId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  target    String
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
+  actor     User?    @relation(fields: [actorId], references: [id])
+
+  @@index([createdAt])
+}

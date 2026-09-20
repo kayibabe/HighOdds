@@ -1,0 +1,12 @@
+node_modules
+.codex
+.next
+dist
+coverage
+.env
+.env.local
+!.env.example
+*.log
+*.tsbuildinfo
+apps/web/.next
+packages/db/generated
