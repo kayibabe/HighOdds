@@ -20,6 +20,9 @@
   "engines": {
     "node": ">=22"
   },
+  "overrides": {
+    "postcss": "^8.5.23"
+  },
   "allowScripts": {
     "@prisma/engines": true,
     "prisma": true,
