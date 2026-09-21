@@ -13,18 +13,18 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: highodds
+          POSTGRES_DB: highodds_test
           POSTGRES_USER: highodds
           POSTGRES_PASSWORD: highodds
         ports:
           - 55432:5432
         options: >-
-          --health-cmd "pg_isready -U highodds -d highodds"
+          --health-cmd "pg_isready -U highodds -d highodds_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://highodds:highodds@localhost:55432/highodds?schema=public
+      DATABASE_URL: postgresql://highodds:highodds@localhost:55432/highodds_test?schema=public
     steps:
       - uses: actions/checkout@v4
 
