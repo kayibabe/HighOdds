@@ -29,11 +29,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return persisted?.role === "ADMIN" || (persisted?.activeTo !== null && persisted?.activeTo !== undefined && persisted.activeTo > new Date());
     },
     async jwt({ token, user }) {
-      if (user?.email) {
-        const persisted = await db.user.findUnique({ where: { email: user.email } });
+      const email = user?.email ?? token.email;
+      if (email) {
+        const persisted = await db.user.findUnique({ where: { email } });
         token.role = persisted?.role;
       }
       return token;
+    },
+    async session({ session, token }) {
+      if (session.user) session.user.role = token.role as "ADMIN" | "SUBSCRIBER" | undefined;
+      return session;
     }
   },
   pages: { signIn: "/signin" }

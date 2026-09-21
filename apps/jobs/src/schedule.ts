@@ -10,6 +10,7 @@ export async function ensureDailyJobs(now: Date): Promise<void> {
   const targetDate = now.toISOString().slice(0, 10);
   const jobs = [
     { jobType: "INGEST_FIXTURES", runAfter: new Date(`${targetDate}T00:05:00.000Z`) },
+    { jobType: "TRAIN_MODEL", runAfter: new Date(`${targetDate}T05:00:00.000Z`) },
     { jobType: "INGEST_ODDS", runAfter: new Date(`${targetDate}T05:30:00.000Z`) },
     { jobType: "PUBLISH_TICKETS", runAfter: new Date(`${targetDate}T06:00:00.000Z`) },
     { jobType: "SETTLE_RESULTS", runAfter: new Date(`${targetDate}T21:00:00.000Z`) }

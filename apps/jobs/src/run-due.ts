@@ -1,6 +1,9 @@
 import { ApiFootballClient } from "./api-football.js";
 import { ingestFixtures, ingestOdds } from "./ingestion.js";
 import { claimDueJobs, completeJob, ensureDailyJobs, failAndReleaseJob, requeueExpiredLeases } from "./schedule.js";
+import { trainModel } from "./train.js";
+import { publishTickets } from "./publish.js";
+import { settleResults } from "./settle.js";
 
 const EXECUTION_TIMEOUT_MS = 4 * 60 * 1000;
 const deadline = Date.now() + EXECUTION_TIMEOUT_MS;
@@ -19,17 +22,14 @@ async function execute(job: { jobType: string }): Promise<void> {
       await ingestOdds(odds);
       return;
     }
+    case "TRAIN_MODEL":
+      await trainModel(new Date());
+      return;
     case "PUBLISH_TICKETS":
-      {
-        const [quotes, modelRuns] = await Promise.all([
-          (await import("@highodds/db")).db.oddsQuote.count({ where: { capturedAt: { lt: new Date() } } }),
-          (await import("@highodds/db")).db.modelRun.count()
-        ]);
-        if (quotes === 0 || modelRuns === 0) throw new Error("Publication gates unavailable: no persisted pre-kickoff quotes or model artifact");
-      }
+      await publishTickets(new Date());
       return;
     case "SETTLE_RESULTS":
-      // Settlement is idempotent; a no-result pass is valid.
+      await settleResults(new Date());
       return;
     default: throw new Error(`Unsupported job type: ${job.jobType}`);
   }

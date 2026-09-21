@@ -1,4 +1,5 @@
 import { db } from "@highodds/db";
+import { normalizeMarket, normalizeSelection } from "./markets.js";
 
 type ProviderFixture = {
   fixture?: { id?: number; date?: string; status?: { short?: string } };
@@ -57,11 +58,17 @@ export async function ingestOdds(records: unknown[]): Promise<{ quotes: number; 
       const bookmaker = await db.bookmaker.upsert({ where: { providerId: providerBookmaker.id }, create: { providerId: providerBookmaker.id, name: providerBookmaker.name }, update: { name: providerBookmaker.name } });
       for (const providerMarket of providerBookmaker.bets ?? []) {
         if (!providerMarket.id || !providerMarket.name) { rejected += 1; continue; }
-        const market = await db.market.upsert({ where: { providerId: providerMarket.id }, create: { providerId: providerMarket.id, name: providerMarket.name }, update: { name: providerMarket.name } });
+        const normalizedKey = normalizeMarket(providerMarket.name);
+        const market = await db.market.upsert({
+          where: { providerId: providerMarket.id },
+          create: { providerId: providerMarket.id, name: providerMarket.name, normalizedKey, selectionEnabled: normalizedKey !== null },
+          update: { name: providerMarket.name, normalizedKey, selectionEnabled: normalizedKey !== null }
+        });
         for (const value of providerMarket.values ?? []) {
           const decimalOdds = Number(value.odd);
-          if (!value.value || !Number.isFinite(decimalOdds) || decimalOdds <= 1 || capturedAt >= fixture.kickoff) { rejected += 1; continue; }
-          await db.oddsQuote.create({ data: { fixtureId: fixture.id, bookmakerId: bookmaker.id, marketId: market.id, selection: value.value, decimalOdds, providerUpdatedAt: providerUpdatedAt && !Number.isNaN(providerUpdatedAt.getTime()) ? providerUpdatedAt : null, capturedAt } });
+          const selection = normalizedKey && value.value ? normalizeSelection(normalizedKey, value.value) : null;
+          if (!selection || !Number.isFinite(decimalOdds) || decimalOdds <= 1 || capturedAt >= fixture.kickoff) { rejected += 1; continue; }
+          await db.oddsQuote.create({ data: { fixtureId: fixture.id, bookmakerId: bookmaker.id, marketId: market.id, selection, decimalOdds, providerUpdatedAt: providerUpdatedAt && !Number.isNaN(providerUpdatedAt.getTime()) ? providerUpdatedAt : null, capturedAt } });
           quotes += 1;
         }
       }

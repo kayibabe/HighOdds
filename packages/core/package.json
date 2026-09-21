@@ -7,7 +7,9 @@
     ".": "./src/index.ts",
     "./odds": "./src/odds.ts",
     "./model": "./src/model.ts",
-    "./tickets": "./src/tickets.ts"
+    "./tickets": "./src/tickets.ts",
+    "./train": "./src/train.ts",
+    "./metrics": "./src/metrics.ts"
   },
   "scripts": {
     "test": "vitest run",

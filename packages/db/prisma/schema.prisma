@@ -151,6 +151,7 @@ model Competition {
   name       String
   country    String?
   fixtures   Fixture[]
+  modelRuns  ModelRun[]
   createdAt  DateTime  @default(now())
 }
 
@@ -224,12 +225,16 @@ model OddsQuote {
 
 model ModelRun {
   id          String   @id @default(cuid())
+  competitionId String?
   version     String
   method      String
   trainedUntil DateTime
   artifact    Json
   createdAt   DateTime @default(now())
+  competition Competition? @relation(fields: [competitionId], references: [id])
   predictions Prediction[]
+
+  @@index([competitionId, createdAt])
 }
 
 model Prediction {
