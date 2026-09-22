@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "jobs:run-due": "tsx src/run-due.ts",
+    "jobs:backfill-fixtures": "tsx src/backfill-fixtures-cli.ts",
     "lint": "tsc --noEmit",
     "test": "vitest run"
   },
