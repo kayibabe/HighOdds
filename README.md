@@ -66,8 +66,14 @@ only signals intent — it doesn't guarantee the database is empty or exclusive 
   voids the ticket if any leg's fixture was postponed/cancelled) and inserts exactly one `Settlement` row —
   matching the database triggers, which reject every other update to `TicketVersion`/`TicketLeg`.
 - Market/selection normalization (`apps/jobs/src/markets.ts`) matches API-Football bet names by text
-  (`"Match Winner"`, `"Goals Over/Under"` 2.5 line only, `"Both Teams Score"`) and is **unverified against a
-  live payload** — check it first against real API-Football responses before relying on ticket output.
+  (`"Match Winner"`, `"Goals Over/Under"` 2.5 line only, `"Both Teams Score"`) and has been **verified against
+  live payloads**: a captured Premier League fixture (`apps/jobs/test/fixtures/odds-brighton-arsenal.json`,
+  exercised by `apps/jobs/test/markets.test.ts`) and, separately, a fresh live pull of an upcoming La Liga
+  fixture across 6 bookmakers (William Hill, Bet365, Marathonbet, Pinnacle, SBO, 1xBet) on 2026-09-22. Every
+  `Match Winner`/`Both Teams Score` value from every bookmaker resolved correctly, near-miss bet names
+  (`"Goals Over/Under First Half"`, `"Results/Both Teams Score"`, etc.) were correctly rejected by the exact
+  string match, and bookmakers whose Asian goal line skips 2.5 entirely (Pinnacle, SBO) simply yield no
+  `TOTAL_GOALS` leg for that bookmaker rather than erroring — expected behavior, not a bug.
 
 ## Deploying to Railway (not yet executed)
 

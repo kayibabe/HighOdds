@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalizeMarket, normalizeSelection, resolveSelection } from "../src/markets.js";
 import fixture from "./fixtures/odds-brighton-arsenal.json" with { type: "json" };
+import asianLineFixture from "./fixtures/odds-realmadrid-villarreal.json" with { type: "json" };
 
 type FixtureBet = { name: string; values: Array<{ value: string; odd: string }> };
 type FixtureBookmaker = { name: string; bets: FixtureBet[] };
@@ -51,6 +52,45 @@ describe("normalizeSelection against real bookmaker value strings", () => {
       const btts = bookmaker.bets.find((bet) => bet.name === "Both Teams Score")!;
       expect(normalizeSelection("BTTS", btts.values.find((v) => v.value === "Yes")!.value)).toBe("YES");
       expect(normalizeSelection("BTTS", btts.values.find((v) => v.value === "No")!.value)).toBe("NO");
+    }
+  });
+});
+
+describe("normalizeMarket/normalizeSelection against a second live-captured payload (fixture 1570411, Real Madrid v Villarreal, 6 bookmakers)", () => {
+  const asianBookmakers = asianLineFixture.bookmakers as FixtureBookmaker[];
+
+  it("accepts Home/Draw/Away for MATCH_WINNER from every real bookmaker in this payload too", () => {
+    for (const bookmaker of asianBookmakers) {
+      const matchWinner = bookmaker.bets.find((bet) => bet.name === "Match Winner")!;
+      for (const { value } of matchWinner.values) {
+        expect(normalizeSelection("MATCH_WINNER", value)).not.toBeNull();
+      }
+    }
+  });
+
+  it("accepts Yes/No for BTTS from every real bookmaker that offers it in this payload", () => {
+    const withBtts = asianBookmakers.filter((b) => b.bets.some((bet) => bet.name === "Both Teams Score"));
+    expect(withBtts.map((b) => b.name).sort()).toEqual(["1xBet", "Bet365", "Marathonbet", "William Hill"]);
+    for (const bookmaker of withBtts) {
+      const btts = bookmaker.bets.find((bet) => bet.name === "Both Teams Score")!;
+      expect(normalizeSelection("BTTS", btts.values.find((v) => v.value === "Yes")!.value)).toBe("YES");
+      expect(normalizeSelection("BTTS", btts.values.find((v) => v.value === "No")!.value)).toBe("NO");
+    }
+  });
+
+  it("accepts only the exact 2.5 line for Bet365, which does carry it in this real payload", () => {
+    const bet365 = asianBookmakers.find((b) => b.name === "Bet365")!;
+    const goalsOverUnder = bet365.bets.find((bet) => normalizeMarket(bet.name) === "TOTAL_GOALS")!;
+    const accepted = goalsOverUnder.values.filter((v) => normalizeSelection("TOTAL_GOALS", v.value) !== null);
+    expect(accepted.map((v) => v.value).sort()).toEqual(["Over 2.5", "Under 2.5"]);
+  });
+
+  it("yields no TOTAL_GOALS selection for Pinnacle or SBO, whose real sheets skip 2.5 entirely (start at 2.75/3.75)", () => {
+    for (const name of ["Pinnacle", "SBO"]) {
+      const bookmaker = asianBookmakers.find((b) => b.name === name)!;
+      const goalsOverUnder = bookmaker.bets.find((bet) => normalizeMarket(bet.name) === "TOTAL_GOALS")!;
+      const accepted = goalsOverUnder.values.filter((v) => normalizeSelection("TOTAL_GOALS", v.value) !== null);
+      expect(accepted).toHaveLength(0);
     }
   });
 });

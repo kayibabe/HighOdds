@@ -2,8 +2,10 @@ import type { SupportedMarket } from "@highodds/core";
 
 /**
  * API-Football bet market names, matched case-insensitively. Only the 2.5 goal
- * line is supported; other lines are ignored. Assumption, not yet verified
- * against a live payload -- adjust here once real responses are inspected.
+ * line is supported; other lines are ignored. Verified against live payloads
+ * (fixture 1557409 Brighton v Arsenal, and fixture 1570411 Real Madrid v
+ * Villarreal across 6 bookmakers including Pinnacle/SBO, which don't always
+ * carry the 2.5 line) -- see apps/jobs/test/markets.test.ts and README.md.
  */
 export function normalizeMarket(providerBetName: string): SupportedMarket | null {
   const name = providerBetName.trim().toLowerCase();
