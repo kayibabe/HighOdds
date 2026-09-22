@@ -15,7 +15,7 @@ Run the jobs runner with `npm run jobs:run-due --workspace=@highodds/jobs`. The 
 
 Next.js only loads `.env` from the app it runs in, not the monorepo root — for local `npm run dev --workspace=@highodds/web`, also copy `.env.example` to `apps/web/.env` (or export the variables another way). The jobs runner does not read `.env` files at all; provide env vars directly (shell, Railway service config) when running it.
 
-Create the first admin account with `npm run db:seed-admin --workspace=@highodds/db` after setting `ADMIN_EMAIL` and `ADMIN_PASSWORD` (12+ chars) in the environment. This upserts an `AdminCredential` and a `User` with `role=ADMIN`; sign in via the NextAuth credentials provider (`POST /api/auth/callback/credentials` with `csrfToken`, `email`, `password` — there is no dedicated admin login form yet, only the subscriber magic-link form at `/signin`).
+Create the first admin account with `npm run db:seed-admin --workspace=@highodds/db` after setting `ADMIN_EMAIL` and `ADMIN_PASSWORD` (12+ chars) in the environment. This upserts an `AdminCredential` and a `User` with `role=ADMIN`; sign in with the admin email/password form at `/signin` (below the subscriber magic-link form). It posts to a server action that calls the NextAuth credentials provider directly, so no CSRF token handling is needed; an incorrect email or password redirects back to `/signin?error=invalid-credentials` with an inline message.
 
 ### Running tests
 
