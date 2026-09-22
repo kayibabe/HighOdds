@@ -6,6 +6,11 @@ import { verify } from "@node-rs/argon2";
 import { db } from "@highodds/db";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  // Railway (like most PaaS reverse proxies) terminates TLS and forwards the original host via
+  // X-Forwarded-Host; Auth.js v5 rejects that by default (UntrustedHost) unless explicitly told
+  // to trust it. Safe here because Railway's edge is the only thing that can set that header for
+  // traffic reaching this container.
+  trustHost: true,
   adapter: PrismaAdapter(db),
   session: { strategy: "jwt" },
   providers: [
