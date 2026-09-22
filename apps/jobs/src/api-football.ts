@@ -28,7 +28,7 @@ export class ApiFootballClient {
     const response: unknown[] = [];
     for (let page = 1; ; page += 1) {
       await this.consumeQuota();
-      const params = new URLSearchParams({ page: String(page) });
+      const params = new URLSearchParams(page > 1 ? { page: String(page) } : {});
       Object.entries(query).forEach(([key, value]) => { if (value !== undefined) params.set(key, String(value)); });
       const url = `${BASE_URL}${endpoint}?${params}`;
       const request = await fetch(url, { headers: { "x-apisports-key": this.apiKey, accept: "application/json" }, signal: AbortSignal.timeout(45_000) });
