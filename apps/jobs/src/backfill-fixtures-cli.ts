@@ -16,7 +16,7 @@ try {
   console.log(JSON.stringify(result));
 } catch (error) {
   if (error instanceof QuotaSafetyError) {
-    console.error(`Stopped early: ${error.message}. Re-run tomorrow to continue from where the quota ran out (already-ingested dates are idempotent upserts).`);
+    console.error(`Stopped early: ${error.message}. Re-run the same command tomorrow -- dates already fetched are skipped, so it resumes from where the quota ran out.`);
     process.exitCode = 1;
   } else {
     throw error;

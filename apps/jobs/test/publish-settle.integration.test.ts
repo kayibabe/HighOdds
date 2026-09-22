@@ -4,7 +4,7 @@ import { db } from "@highodds/db";
 import { dixonColesDistribution, expectedGoals, type TeamStrengths } from "@highodds/core";
 import { generatePredictions } from "../src/predict.js";
 import { publishTickets } from "../src/publish.js";
-import { settleResults } from "../src/settle.js";
+import { refreshPendingResults, settleResults } from "../src/settle.js";
 
 /**
  * Exercises publishTickets/settleResults end to end against a real local Postgres, the same way
@@ -249,6 +249,76 @@ describe.skipIf(!databaseUrl)("publishTickets and settleResults (live DB)", () =
 
       const settlement = await db.settlement.findUnique({ where: { ticketVersionId } });
       expect(settlement).toBeNull();
+    });
+  });
+
+  describe("refreshPendingResults", () => {
+    it("re-fetches a fixture that finished after being ingested as SCHEDULED, unblocking settlement", async () => {
+      const seed = randomInt(1, 90_000);
+      const base = 780_000_000 + seed * 1000;
+      const competition = await db.competition.create({ data: { providerId: base + 1, name: "Synthetic Refresh League", country: null } });
+      const homeTeam = await db.team.create({ data: { providerId: base + 2, name: "Synthetic Refresh Home" } });
+      const awayTeam = await db.team.create({ data: { providerId: base + 3, name: "Synthetic Refresh Away" } });
+      const kickoff = new Date("2026-03-01T12:00:00.000Z");
+      const fixture = await db.fixture.create({ data: { providerId: base + 4, competitionId: competition.id, homeTeamId: homeTeam.id, awayTeamId: awayTeam.id, kickoff, status: "SCHEDULED" } });
+
+      const version = await db.ticketVersion.create({
+        data: { targetDate: new Date("2026-03-01T00:00:00.000Z"), tier: "STANDARD", bookmakerId: `standalone-${base}`, combinedOdds: 6, confidenceThreshold: 70, relaxed: false, lockAt: kickoff, decision: [] }
+      });
+      await db.ticketLeg.create({ data: { ticketVersionId: version.id, fixtureId: fixture.id, quoteId: `standalone-quote-${base}`, marketKey: "MATCH_WINNER", selection: "HOME", decimalOdds: 6, probability: 0.5 } });
+
+      // The test DB accumulates permanent TicketVersion/TicketLeg rows across every run of this
+      // suite (they're append-only), so refreshPendingResults' query legitimately picks up other
+      // stale pending fixtures too, not just this one. The fake only resolves the batch(es)
+      // containing *this* fixture's providerId, so assertions stay correct regardless of what
+      // else has piled up.
+      const now = new Date(kickoff.getTime() + 2 * 60 * 60 * 1000);
+      const requestedIds: number[] = [];
+      const fakeClient = {
+        getPaged: async (_endpoint: string, query: Record<string, string | number | undefined>) => {
+          const batchIds = String(query.ids).split("-").map(Number);
+          requestedIds.push(...batchIds);
+          if (!batchIds.includes(fixture.providerId)) return [];
+          return [{
+            fixture: { id: fixture.providerId, date: kickoff.toISOString(), status: { short: "FT" } },
+            league: { id: competition.providerId, name: "Synthetic Refresh League", country: null },
+            teams: { home: { id: homeTeam.providerId, name: "Synthetic Refresh Home" }, away: { id: awayTeam.providerId, name: "Synthetic Refresh Away" } },
+            goals: { home: 2, away: 0 }
+          }];
+        }
+      };
+
+      const refreshResult = await refreshPendingResults(now, fakeClient);
+      expect(refreshResult.refreshed).toBeGreaterThanOrEqual(1);
+      expect(requestedIds).toContain(fixture.providerId);
+
+      const updated = await db.fixture.findUniqueOrThrow({ where: { id: fixture.id } });
+      expect(updated.status).toBe("FINISHED");
+      expect(updated.homeGoals).toBe(2);
+      expect(updated.awayGoals).toBe(0);
+
+      const settleResult = await settleResults(now);
+      expect(settleResult.settled).toBeGreaterThanOrEqual(1);
+      const settlement = await db.settlement.findUniqueOrThrow({ where: { ticketVersionId: version.id } });
+      expect(settlement.outcome).toBe("WIN");
+    });
+
+    it("does not request a SCHEDULED fixture that no pending ticket depends on", async () => {
+      const seed = randomInt(1, 90_000);
+      const base = 785_000_000 + seed * 1000;
+      const competition = await db.competition.create({ data: { providerId: base + 1, name: "Synthetic Untouched League", country: null } });
+      const homeTeam = await db.team.create({ data: { providerId: base + 2, name: "Synthetic Untouched Home" } });
+      const awayTeam = await db.team.create({ data: { providerId: base + 3, name: "Synthetic Untouched Away" } });
+      const kickoff = new Date("2026-03-02T12:00:00.000Z");
+      const fixture = await db.fixture.create({ data: { providerId: base + 4, competitionId: competition.id, homeTeamId: homeTeam.id, awayTeamId: awayTeam.id, kickoff, status: "SCHEDULED" } });
+
+      // Other accumulated pending tickets from earlier tests may still trigger calls of their own;
+      // what this asserts is that *this* untied fixture is never among the requested IDs.
+      const requestedIds: number[] = [];
+      const fakeClient = { getPaged: async (_endpoint: string, query: Record<string, string | number | undefined>) => { requestedIds.push(...String(query.ids).split("-").map(Number)); return []; } };
+      await refreshPendingResults(new Date(kickoff.getTime() + 60 * 60 * 1000), fakeClient);
+
+      expect(requestedIds).not.toContain(fixture.providerId);
     });
   });
 });

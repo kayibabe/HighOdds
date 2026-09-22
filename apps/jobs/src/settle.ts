@@ -1,5 +1,37 @@
 import { db } from "@highodds/db";
 import { resolveSelection } from "./markets.js";
+import { ApiFootballClient } from "./api-football.js";
+import { ingestFixtures } from "./ingestion.js";
+
+const REFRESH_BATCH_SIZE = 20; // API-Football's /fixtures?ids= accepts at most 20 "id-id-id" values per request
+
+/**
+ * INGEST_FIXTURES only ever captures a fixture once, before kickoff (see run-due.ts); nothing else
+ * re-fetches it afterward. Left alone, a fixture that has actually finished stays SCHEDULED in the
+ * database forever, and settleResults would treat its ticket as permanently pending. This targets
+ * only fixtures that are actually blocking a real settlement decision (an unlocked, unsettled
+ * ticket leg) rather than refreshing every stale row in the database.
+ */
+export async function refreshPendingResults(now: Date, client: Pick<ApiFootballClient, "getPaged"> = new ApiFootballClient()): Promise<{ refreshed: number }> {
+  const staleFixtures = await db.fixture.findMany({
+    where: {
+      status: { in: ["SCHEDULED", "LIVE"] },
+      kickoff: { lt: now },
+      ticketLegs: { some: { ticketVersion: { lockAt: { lte: now }, settlements: { none: {} }, successors: { none: {} } } } }
+    },
+    select: { providerId: true }
+  });
+  if (staleFixtures.length === 0) return { refreshed: 0 };
+
+  let refreshed = 0;
+  for (let i = 0; i < staleFixtures.length; i += REFRESH_BATCH_SIZE) {
+    const batch = staleFixtures.slice(i, i + REFRESH_BATCH_SIZE);
+    const records = await client.getPaged("/fixtures", { ids: batch.map((fixture) => fixture.providerId).join("-") });
+    const result = await ingestFixtures(records);
+    refreshed += result.ingested;
+  }
+  return { refreshed };
+}
 
 export async function settleResults(now: Date): Promise<{ settled: number; pending: number }> {
   const candidates = await db.ticketVersion.findMany({
