@@ -17,6 +17,34 @@ Next.js only loads `.env` from the app it runs in, not the monorepo root — for
 
 Create the first admin account with `npm run db:seed-admin --workspace=@highodds/db` after setting `ADMIN_EMAIL` and `ADMIN_PASSWORD` (12+ chars) in the environment. This upserts an `AdminCredential` and a `User` with `role=ADMIN`; sign in via the NextAuth credentials provider (`POST /api/auth/callback/credentials` with `csrfToken`, `email`, `password` — there is no dedicated admin login form yet, only the subscriber magic-link form at `/signin`).
 
+### Running tests
+
+`npm test` runs the full suite. `apps/jobs/test/ingestion.integration.test.ts` additionally runs against a
+live Postgres whenever `DATABASE_URL` is set, and its `afterAll` deletes rows by provider ID — **never point
+it at your dev database.** Create a separate `highodds_test` database against the docker-compose Postgres
+(e.g. `docker exec <postgres-container> psql -U highodds -d highodds -c "CREATE DATABASE highodds_test OWNER
+highodds"`), then apply migrations and run tests with `DATABASE_URL` pointing at it:
+
+PowerShell (Windows):
+
+```powershell
+$env:DATABASE_URL = "postgresql://highodds:highodds@localhost:55432/highodds_test?schema=public"
+npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
+npm test
+```
+
+bash/zsh (macOS/Linux):
+
+```bash
+export DATABASE_URL="postgresql://highodds:highodds@localhost:55432/highodds_test?schema=public"
+npx prisma migrate deploy --schema packages/db/prisma/schema.prisma
+npm test
+```
+
+The test suite refuses to run (throws instead of silently deleting data) if `DATABASE_URL`'s database name
+doesn't end in `_test`. Its synthetic provider IDs are also randomized per run, since a `_test`-suffixed name
+only signals intent — it doesn't guarantee the database is empty or exclusive to one run.
+
 ## Model pipeline, publication, and settlement
 
 - `TRAIN_MODEL` (daily, and on demand from the admin console) fits per-competition team attack/defense
