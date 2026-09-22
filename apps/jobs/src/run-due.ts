@@ -3,7 +3,7 @@ import { ingestFixtures, ingestOdds } from "./ingestion.js";
 import { claimDueJobs, completeJob, ensureDailyJobs, failAndReleaseJob, requeueExpiredLeases } from "./schedule.js";
 import { trainModel } from "./train.js";
 import { publishTickets } from "./publish.js";
-import { settleResults } from "./settle.js";
+import { refreshPendingResults, settleResults } from "./settle.js";
 
 const EXECUTION_TIMEOUT_MS = 4 * 60 * 1000;
 const deadline = Date.now() + EXECUTION_TIMEOUT_MS;
@@ -28,9 +28,12 @@ async function execute(job: { jobType: string }): Promise<void> {
     case "PUBLISH_TICKETS":
       await publishTickets(new Date());
       return;
-    case "SETTLE_RESULTS":
-      await settleResults(new Date());
+    case "SETTLE_RESULTS": {
+      const settleNow = new Date();
+      await refreshPendingResults(settleNow, client);
+      await settleResults(settleNow);
       return;
+    }
     default: throw new Error(`Unsupported job type: ${job.jobType}`);
   }
 }
