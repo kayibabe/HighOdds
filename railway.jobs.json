@@ -1,5 +1,8 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "buildCommand": "npm ci && npm run db:generate"
+  },
   "deploy": {
     "startCommand": "npm run jobs:run-due --workspace=@highodds/jobs",
     "restartPolicyType": "NEVER",
