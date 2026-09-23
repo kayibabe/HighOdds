@@ -171,6 +171,8 @@ model Fixture {
   awayTeamId  String
   kickoff     DateTime
   status      FixtureStatus @default(SCHEDULED)
+  statusCode  String?
+  elapsedMinute Int?
   homeGoals   Int?
   awayGoals   Int?
   receivedAt  DateTime      @default(now())

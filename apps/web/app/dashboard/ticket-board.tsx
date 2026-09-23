@@ -9,6 +9,8 @@ export type TicketLegData = {
   competition: string;
   kickoff: string;
   fixtureStatus: string;
+  statusCode: string | null;
+  elapsedMinute: number | null;
   homeGoals: number | null;
   awayGoals: number | null;
   market: string;
@@ -62,6 +64,20 @@ function selectionLabel(selection: string): string {
   if (selection === "NO") return "No";
   const total = /^(OVER|UNDER)_([0-9]+)_([0-9]+)$/.exec(selection);
   return total ? `${total[1] === "OVER" ? "Over" : "Under"} ${total[2]}.${total[3]}` : selection;
+}
+
+function matchState(leg: TicketLegData): string {
+  if (leg.fixtureStatus === "SCHEDULED") return "Pending";
+  if (leg.fixtureStatus === "FINISHED") return "Finished";
+  if (leg.fixtureStatus === "POSTPONED") return "Void / postponed";
+  if (leg.fixtureStatus === "CANCELLED") return "Void / cancelled";
+  const period: Record<string, string> = { "1H": "1st half", HT: "Half-time", "2H": "2nd half", ET: "Extra time", BT: "Break", P: "Penalties" };
+  const label = period[leg.statusCode ?? ""] ?? "Live";
+  return leg.elapsedMinute === null ? label : `${label} · ${leg.elapsedMinute}′`;
+}
+
+function scoreline(leg: TicketLegData): string {
+  return leg.homeGoals !== null && leg.awayGoals !== null ? `${leg.homeGoals}–${leg.awayGoals}` : "—";
 }
 
 function DetailPanel({ selected, onClose }: { selected: SelectedLeg; onClose: () => void }) {
@@ -139,7 +155,7 @@ function DetailPanel({ selected, onClose }: { selected: SelectedLeg; onClose: ()
         <div className="selection-facts">
           <div><small>Market</small><strong>{leg.market}: {selectionLabel(leg.selection)}</strong></div>
           <div><small>Snapshot odds</small><strong>{leg.odds.toFixed(2)}×</strong></div>
-          <div><small>Fixture status</small><strong>{leg.fixtureStatus.toLowerCase()}</strong></div>
+          <div><small>Match state</small><strong>{matchState(leg)}</strong></div>
           <div><small>Score</small><strong>{score ?? "Not recorded"}</strong></div>
         </div>
 
@@ -185,7 +201,7 @@ function DetailPanel({ selected, onClose }: { selected: SelectedLeg; onClose: ()
           {view === "result" && <>
             <h3>Recorded result</h3>
             <dl>
-              <div><dt>Fixture status</dt><dd>{leg.fixtureStatus.toLowerCase()}</dd></div>
+              <div><dt>Match state</dt><dd>{matchState(leg)}</dd></div>
               <div><dt>Stored score</dt><dd>{score ?? "Not recorded"}</dd></div>
               <div><dt>Whole ticket outcome</dt><dd>{ticket.outcome.toLowerCase()}</dd></div>
             </dl>
@@ -247,6 +263,7 @@ export default function TicketBoard({ tickets }: { tickets: TicketCardData[] }) 
                         <strong>{leg.home} <span>vs</span> {leg.away}</strong>
                         <small>{leg.competition} · {time(leg.kickoff)}</small>
                         <span className="premium-leg-market">{leg.market}: {selectionLabel(leg.selection)}</span>
+                        <span className="premium-leg-market">{matchState(leg)} · Score {scoreline(leg)}</span>
                       </span>
                       <span className="premium-leg-numbers">
                         <strong>{leg.odds.toFixed(2)}×</strong>

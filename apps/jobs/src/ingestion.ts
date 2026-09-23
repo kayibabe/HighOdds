@@ -2,7 +2,7 @@ import { db } from "@highodds/db";
 import { normalizeMarket, normalizeSelection } from "./markets.js";
 
 type ProviderFixture = {
-  fixture?: { id?: number; date?: string; status?: { short?: string } };
+  fixture?: { id?: number; date?: string; status?: { short?: string; elapsed?: number | null } };
   league?: { id?: number; name?: string; country?: string | null };
   teams?: { home?: { id?: number; name?: string }; away?: { id?: number; name?: string } };
   goals?: { home?: number | null; away?: number | null };
@@ -36,8 +36,8 @@ export async function ingestFixtures(records: unknown[]): Promise<{ ingested: nu
     ]);
     await db.fixture.upsert({
       where: { providerId: fixture.id },
-      create: { providerId: fixture.id, competitionId: competition.id, homeTeamId: homeTeam.id, awayTeamId: awayTeam.id, kickoff, status: fixtureStatus(fixture.status?.short), homeGoals: record.goals?.home ?? null, awayGoals: record.goals?.away ?? null },
-      update: { competitionId: competition.id, homeTeamId: homeTeam.id, awayTeamId: awayTeam.id, kickoff, status: fixtureStatus(fixture.status?.short), homeGoals: record.goals?.home ?? null, awayGoals: record.goals?.away ?? null, receivedAt: new Date() }
+      create: { providerId: fixture.id, competitionId: competition.id, homeTeamId: homeTeam.id, awayTeamId: awayTeam.id, kickoff, status: fixtureStatus(fixture.status?.short), statusCode: fixture.status?.short ?? null, elapsedMinute: fixture.status?.elapsed ?? null, homeGoals: record.goals?.home ?? null, awayGoals: record.goals?.away ?? null },
+      update: { competitionId: competition.id, homeTeamId: homeTeam.id, awayTeamId: awayTeam.id, kickoff, status: fixtureStatus(fixture.status?.short), statusCode: fixture.status?.short ?? null, elapsedMinute: fixture.status?.elapsed ?? null, homeGoals: record.goals?.home ?? null, awayGoals: record.goals?.away ?? null, receivedAt: new Date() }
     });
     ingested += 1;
   }

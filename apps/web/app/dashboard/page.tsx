@@ -90,7 +90,7 @@ export default async function DashboardPage() {
         return {
           id: leg.id, home: leg.fixture.homeTeam.name, away: leg.fixture.awayTeam.name,
           competition: leg.fixture.competition.name, kickoff: leg.fixture.kickoff.toISOString(),
-          fixtureStatus: leg.fixture.status, homeGoals: leg.fixture.homeGoals, awayGoals: leg.fixture.awayGoals,
+          fixtureStatus: leg.fixture.status, statusCode: leg.fixture.statusCode, elapsedMinute: leg.fixture.elapsedMinute, homeGoals: leg.fixture.homeGoals, awayGoals: leg.fixture.awayGoals,
           market: marketNameByKey.get(leg.marketKey) ?? leg.marketKey, selection: leg.selection,
           odds, probability, quoteCapturedAt: quoteTimeById.get(leg.quoteId)?.toISOString() ?? null,
           consensusProbability: snapshot?.consensusProbability ?? null,
