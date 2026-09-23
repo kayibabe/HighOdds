@@ -30,9 +30,11 @@ async function execute(job: { jobType: string }): Promise<void> {
       assertTrainedAny(result);
       return;
     }
-    case "PUBLISH_TICKETS":
-      await publishTickets(new Date());
+    case "PUBLISH_TICKETS": {
+      const result = await publishTickets(new Date());
+      console.log(`PUBLISH_TICKETS predicted=${result.predicted} predictionsSkipped=${result.predictionsSkipped} published=${result.published}`);
       return;
+    }
     case "SETTLE_RESULTS": {
       const settleNow = new Date();
       await refreshPendingResults(settleNow, client);
