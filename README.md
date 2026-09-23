@@ -77,11 +77,20 @@ only signals intent — it doesn't guarantee the database is empty or exclusive 
   string match, and bookmakers whose Asian goal line skips 2.5 entirely (Pinnacle, SBO) simply yield no
   `TOTAL_GOALS` leg for that bookmaker rather than erroring — expected behavior, not a bug.
 
-## Deploying to Railway (not yet executed)
+## Deploying to Railway
 
-1. Create two Railway services from this repo: a web service (uses `railway.json`) and a cron worker (uses
-   `railway.jobs.json`, already configured to run `npm run jobs:run-due --workspace=@highodds/jobs` every 5
-   minutes).
+Production runs as three Railway services: `web`, `jobs` (cron) and `Postgres`. Build/start settings live on
+each service in the Railway dashboard, not in this repo: Railway's Config as Code stops working on
+2026-12-01, and services that never used it can no longer opt in. The root `railway.json` is still
+auto-detected until then and mirrors the web settings; after that date it is ignored.
+
+1. Create the services from this repo and set, per service (Settings → Build / Deploy):
+   - `web`: build `npm ci && npm run db:generate && npm run build --workspace=@highodds/web`, start
+     `npm run start --workspace=@highodds/web`, restart on failure.
+   - `jobs`: build `npm ci && npm run db:generate`, start `npm run jobs:run-due --workspace=@highodds/jobs`,
+     cron schedule `*/5 * * * *`.
+   Deploy with `railway redeploy -s <service> --from-source` when settings change; a plain `redeploy`
+   re-runs the previous deployment's snapshot and ignores settings changed since.
 2. Set env vars from `.env.example` on both services (`DATABASE_URL` pointing at a Railway/managed Postgres,
    `API_FOOTBALL_KEY`, `AUTH_SECRET`, `AUTH_RESEND_KEY`, `EMAIL_FROM`, `ADMIN_EMAIL`).
 3. Apply migrations non-interactively: `npm run db:migrate:deploy --workspace=@highodds/db` (do **not** use
@@ -95,8 +104,9 @@ only signals intent — it doesn't guarantee the database is empty or exclusive 
 7. Post-deploy checks: `GET /api/health` returns `{"status":"ok"}`; the admin console's Jobs & quota panel
    shows `INGEST_FIXTURES`/`TRAIN_MODEL` completing (`DONE`) rather than failing repeatedly.
 
-None of steps 1–6 have been executed by this assistant — no live API-Football/Resend calls were made and no
-Railway deployment was attempted, since this session has no such credentials or account access.
+8. After rotating the Postgres password (change it with `\password postgres` in the Postgres service console
+   *and* update `PGPASSWORD`/`POSTGRES_PASSWORD`), redeploy `web` and `jobs` from source: running
+   deployments keep the old `DATABASE_URL` until then.
 
 ## Safety boundary
 
