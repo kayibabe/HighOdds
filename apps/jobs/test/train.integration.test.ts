@@ -41,9 +41,12 @@ describe.skipIf(!databaseUrl)("TRAIN_MODEL training data (live DB)", () => {
     });
 
     it("trains nothing, fails visibly, and records the backfill hint on the JobRun", async () => {
+      // Other suites run in parallel and may add competitions between this snapshot and trainModel's
+      // own read, so the snapshot is a lower bound (competitions are never deleted mid-run here).
       const competitionCount = await db.competition.count();
       const result = await trainModel(now);
-      expect(result).toEqual({ trained: 0, skipped: competitionCount });
+      expect(result.trained).toBe(0);
+      expect(result.skipped).toBeGreaterThanOrEqual(competitionCount);
       expect(await db.modelRun.count({ where: { trainedUntil: now } })).toBe(0);
 
       let thrown: unknown;
@@ -62,7 +65,7 @@ describe.skipIf(!databaseUrl)("TRAIN_MODEL training data (live DB)", () => {
       expect(stored.status).toBe("DUE");
       expect(stored.leaseExpiresAt).toBeNull();
       expect(stored.lastError).toBe((thrown as Error).message);
-      expect(stored.lastError).toMatch(new RegExp(`all ${competitionCount} had fewer than 50 FINISHED fixtures.*jobs:backfill-fixtures`));
+      expect(stored.lastError).toMatch(new RegExp(`all ${result.skipped} had fewer than 50 FINISHED fixtures.*jobs:backfill-fixtures`));
       expect(stored.runAfter.getTime()).toBeGreaterThanOrEqual(before + NO_TRAINING_DATA_RETRY_MS);
       expect(stored.runAfter.getTime()).toBeLessThanOrEqual(Date.now() + NO_TRAINING_DATA_RETRY_MS);
     });
@@ -110,9 +113,10 @@ describe.skipIf(!databaseUrl)("TRAIN_MODEL training data (live DB)", () => {
     });
 
     it("trains exactly that competition, persists its ModelRun, and passes the guard", async () => {
-      const competitionCount = await db.competition.count();
+      const competitionCount = await db.competition.count(); // lower bound; see the no-data scenario
       const result = await trainModel(now);
-      expect(result).toEqual({ trained: 1, skipped: competitionCount - 1 });
+      expect(result.trained).toBe(1);
+      expect(result.skipped).toBeGreaterThanOrEqual(competitionCount - 1);
       expect(() => assertTrainedAny(result)).not.toThrow();
 
       const runs = await db.modelRun.findMany({ where: { trainedUntil: now } });
