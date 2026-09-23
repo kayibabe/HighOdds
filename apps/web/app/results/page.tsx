@@ -45,7 +45,7 @@ export default async function ResultsPage() {
         ))}
       </div>
       <p>Average closing-line value across settled legs: {clv === null ? "—" : `${clv.toFixed(2)}%`}</p>
-      <ul className="tickets">{tickets.map((ticket) => <li key={ticket.id}><strong>{ticket.tier}</strong><span>{Number(ticket.combinedOdds).toFixed(2)}</span><span>{ticket.settlements[0]?.outcome ?? "PENDING"}</span></li>)}</ul>
+      <ul className="tickets">{tickets.map((ticket) => <li key={ticket.id}><strong>{ticket.tier}</strong><span>{Number(ticket.combinedOdds).toFixed(2)}</span><span className={`status-badge ${(ticket.settlements[0]?.outcome ?? "PENDING").toLowerCase()}`}>{ticket.settlements[0]?.outcome ?? "PENDING"}</span></li>)}</ul>
       {tickets.length === 0 && <div className="notice">No published paper tickets yet.</div>}
     </section>
   );
