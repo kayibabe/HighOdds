@@ -6,19 +6,22 @@ const SELECTION_WINDOW_MS = 20 * 60 * 60 * 1000;
 
 const MARKET_OUTCOME_COUNT: Record<SupportedMarket, number> = { MATCH_WINNER: 3, TOTAL_GOALS: 2, BTTS: 2 };
 
-export async function publishTickets(now: Date): Promise<{ published: number }> {
-  await generatePredictions(now);
+export interface PublishResult { published: number; predicted: number; predictionsSkipped: number; }
+
+export async function publishTickets(now: Date): Promise<PublishResult> {
+  const forecast = await generatePredictions(now);
+  const result = (published: number): PublishResult => ({ published, predicted: forecast.predicted, predictionsSkipped: forecast.skipped });
   const windowEnd = new Date(now.getTime() + SELECTION_WINDOW_MS);
   const fixtures = await db.fixture.findMany({
     where: { status: "SCHEDULED", kickoff: { gte: now, lte: windowEnd } },
     select: { id: true, competitionId: true, kickoff: true }
   });
-  if (fixtures.length === 0) return { published: 0 };
+  if (fixtures.length === 0) return result(0);
   const fixtureIds = fixtures.map((fixture) => fixture.id);
   const fixtureById = new Map(fixtures.map((fixture) => [fixture.id, fixture]));
 
   const activeBookmakers = await db.bookmaker.findMany({ where: { active: true }, orderBy: { priority: "asc" } });
-  if (activeBookmakers.length === 0) return { published: 0 };
+  if (activeBookmakers.length === 0) return result(0);
   const bookmakerPriority = activeBookmakers.map((bookmaker) => bookmaker.id);
 
   const markets = await db.market.findMany({ where: { normalizedKey: { not: null } }, select: { id: true, normalizedKey: true } });
@@ -33,7 +36,7 @@ export async function publishTickets(now: Date): Promise<{ published: number }> 
     const fixture = fixtureById.get(quote.fixtureId);
     return fixture ? quoteIsFresh({ capturedAt: quote.capturedAt }, fixture.kickoff, now) : false;
   });
-  if (freshQuotes.length === 0) return { published: 0 };
+  if (freshQuotes.length === 0) return result(0);
 
   const predictions = await db.prediction.findMany({
     where: { fixtureId: { in: fixtureIds }, marketId: { in: markets.map((m) => m.id) } },
@@ -88,7 +91,7 @@ export async function publishTickets(now: Date): Promise<{ published: number }> 
       leagueId: fixture.competitionId, kickoff: fixture.kickoff
     });
   }
-  if (candidates.length === 0) return { published: 0 };
+  if (candidates.length === 0) return result(0);
 
   const drafts = buildTickets(candidates, bookmakerPriority, now);
   const targetDate = new Date(`${now.toISOString().slice(0, 10)}T00:00:00.000Z`);
@@ -118,5 +121,5 @@ export async function publishTickets(now: Date): Promise<{ published: number }> 
     });
     published += 1;
   }
-  return { published };
+  return result(published);
 }

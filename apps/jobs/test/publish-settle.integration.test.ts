@@ -158,6 +158,8 @@ describe.skipIf(!databaseUrl)("publishTickets and settleResults (live DB)", () =
     it("publishes a STANDARD-tier ticket from a positive-EV mispriced quote", async () => {
       const result = await publishTickets(now);
       expect(result.published).toBeGreaterThanOrEqual(1);
+      expect(result.predicted).toBeGreaterThanOrEqual(0);
+      expect(result.predictionsSkipped).toBeGreaterThanOrEqual(0);
 
       const versions = await db.ticketVersion.findMany({ where: { bookmakerId }, include: { legs: true } });
       expect(versions).toHaveLength(1);
