@@ -1,11 +1,13 @@
 import { ApiFootballClient } from "./api-football.js";
 import { ingestFixtures, ingestOdds } from "./ingestion.js";
 import { claimDueJobs, completeJob, ensureDailyJobs, failAndReleaseJob, requeueExpiredLeases } from "./schedule.js";
-import { trainModel } from "./train.js";
+import { NoTrainingDataError, assertTrainedAny, trainModel } from "./train.js";
 import { publishTickets } from "./publish.js";
 import { refreshPendingResults, settleResults } from "./settle.js";
 
 const EXECUTION_TIMEOUT_MS = 4 * 60 * 1000;
+// Missing history won't fix itself within minutes; retry hourly so training resumes on its own after a backfill.
+const NO_TRAINING_DATA_RETRY_MS = 60 * 60 * 1000;
 const deadline = Date.now() + EXECUTION_TIMEOUT_MS;
 
 async function execute(job: { jobType: string }): Promise<void> {
@@ -22,9 +24,12 @@ async function execute(job: { jobType: string }): Promise<void> {
       await ingestOdds(odds);
       return;
     }
-    case "TRAIN_MODEL":
-      await trainModel(new Date());
+    case "TRAIN_MODEL": {
+      const result = await trainModel(new Date());
+      console.log(`TRAIN_MODEL trained=${result.trained} skipped=${result.skipped}`);
+      assertTrainedAny(result);
       return;
+    }
     case "PUBLISH_TICKETS":
       await publishTickets(new Date());
       return;
@@ -52,7 +57,8 @@ async function main(): Promise<void> {
       await execute(job);
       await completeJob(job.id);
     } catch (error) {
-      await failAndReleaseJob(job.id, error);
+      console.error(`${job.jobType} failed:`, error instanceof Error ? error.message : error);
+      await failAndReleaseJob(job.id, error, error instanceof NoTrainingDataError ? NO_TRAINING_DATA_RETRY_MS : undefined);
     }
   }
 }
