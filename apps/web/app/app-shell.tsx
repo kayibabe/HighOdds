@@ -9,11 +9,12 @@ import ThemeToggle from "./theme-toggle";
 // slim status header on top, bottom tab bar on phones. Sign-in renders standalone, as in lohela.
 
 type NavItem = { href: string; label: string; icon: IconName; hint: string };
-type IconName = "home" | "sparkles" | "chart" | "shield" | "login";
+type IconName = "home" | "sparkles" | "chart" | "shield" | "login" | "search";
 
 const WORKSPACE: NavItem[] = [
   { href: "/", label: "Overview", icon: "home", hint: "How HighOdds works" },
   { href: "/dashboard", label: "Dashboard", icon: "sparkles", hint: "Today's published research" },
+  { href: "/research", label: "Research", icon: "search", hint: "Fixture probabilities and price history" },
   { href: "/results", label: "Results", icon: "chart", hint: "Verified paper history" }
 ];
 const ADMIN: NavItem = { href: "/admin", label: "Admin", icon: "shield", hint: "System administration" };
@@ -24,6 +25,7 @@ function NavIcon({ name }: { name: IconName }) {
     home: <><path d="M4 11 12 4l8 7" /><path d="M6 10v10h12V10" /><path d="M10 20v-5h4v5" /></>,
     sparkles: <><path d="m12 3-1.2 4.1L7 8.3l3.8 1.2L12 13l1.2-3.5L17 8.3l-3.8-1.2L12 3Z" /><path d="m5 14-.7 2.3L2 17l2.3.7L5 20l.7-2.3L8 17l-2.3-.7L5 14Z" /></>,
     chart: <path d="M5 20V10M12 20V4M19 20v-7" />,
+    search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /><path d="M7.5 10.5h6M10.5 7.5v6" /></>,
     shield: <><path d="M12 3 20 6v5c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10V6l8-3Z" /><path d="m9 12 2 2 4-4" /></>,
     login: <><path d="M14 4h5v16h-5" /><path d="M10 16l4-4-4-4" /><path d="M14 12H4" /></>
   };

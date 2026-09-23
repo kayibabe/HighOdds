@@ -348,6 +348,24 @@ h2 { font-size: 1.15rem; letter-spacing: -0.01em; margin: 32px 0 12px; }
 .matches-table { min-width: 660px; }
 .matches-table td:first-child, .matches-table td:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
+/* Fixture research workspace */
+.research-layout { display: grid; grid-template-columns: minmax(220px, 290px) minmax(0, 1fr); gap: 22px; align-items: start; margin-top: 26px; }
+.research-fixtures { display: grid; gap: 8px; max-height: calc(100dvh - 145px); overflow: auto; position: sticky; top: 76px; }
+.research-fixture { display: grid; gap: 5px; padding: 13px 14px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); }
+.research-fixture:hover, .research-fixture.active { border-color: var(--accent); background: var(--accent-bg); }
+.research-fixture small { color: var(--muted); font-size: 10px; }
+.research-fixture strong { font-size: 12px; }
+.research-fixture strong span { color: var(--muted); font-weight: 400; }
+.research-detail { min-width: 0; padding: 22px; border: 1px solid var(--border); border-radius: var(--r-xl); background: var(--surface); }
+.research-detail h2 { margin: 7px 0 0; font-size: clamp(1.3rem, 3vw, 1.8rem); }
+.research-detail h3 { margin: 28px 0 12px; font-size: 14px; }
+.research-probabilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.research-market { padding: 14px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface2); }
+.research-market > strong { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.research-market > div { display: grid; gap: 5px; margin: 10px 0; }
+.research-market > div span { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 4px; border-bottom: 1px solid var(--border); font-size: 12px; font-variant-numeric: tabular-nums; }
+.research-market small { color: var(--muted); font-size: 10px; }
+
 /* ── Forms ────────────────────────────────────────────────── */
 label { display: grid; gap: 8px; margin-bottom: 16px; font-size: 13px; color: var(--text2); font-weight: 600; }
 input {
