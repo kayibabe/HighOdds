@@ -1,5 +1,5 @@
 import { db } from "@highodds/db";
-import { buildTickets, conservativeExpectedValue, devigProbability, quoteIsFresh, type CandidateLeg, type SupportedMarket } from "@highodds/core";
+import { buildTicketsAround, conservativeExpectedValue, devigProbability, quoteIsFresh, type CandidateLeg, type SupportedMarket, type TicketTier } from "@highodds/core";
 import { generatePredictions } from "./predict.js";
 
 const SELECTION_WINDOW_MS = 20 * 60 * 60 * 1000;
@@ -93,16 +93,24 @@ export async function publishTickets(now: Date): Promise<PublishResult> {
   }
   if (candidates.length === 0) return result(0);
 
-  const drafts = buildTickets(candidates, bookmakerPriority, now);
   const targetDate = new Date(`${now.toISOString().slice(0, 10)}T00:00:00.000Z`);
+  const liveVersions = await db.ticketVersion.findMany({
+    where: { targetDate, successors: { none: {} } },
+    orderBy: { publishedAt: "desc" },
+    include: { legs: { select: { fixtureId: true } } }
+  });
+  const openByTier = new Map<TicketTier["key"], (typeof liveVersions)[number]>();
+  for (const version of liveVersions) if (!openByTier.has(version.tier)) openByTier.set(version.tier, version);
+
+  // Tiers never share a fixture, including with today's tickets that stay live (locked, or not replaced).
+  const drafts = buildTicketsAround(candidates, bookmakerPriority, now, [...openByTier.values()].map((version) => ({
+    tier: version.tier, locked: version.lockAt <= now, fixtureIds: version.legs.map((leg) => leg.fixtureId)
+  })));
   let published = 0;
 
   for (const draft of drafts) {
-    const open = await db.ticketVersion.findFirst({
-      where: { targetDate, tier: draft.tier.key, successors: { none: {} } },
-      orderBy: { publishedAt: "desc" }
-    });
-    if (open && open.lockAt <= now) continue; // already locked; cannot supersede, skip this tier today
+    const open = openByTier.get(draft.tier.key);
+    if (open && open.lockAt <= now) continue; // defensive: buildTicketsAround never drafts a locked tier
     const lockAt = draft.legs.reduce((earliest, leg) => (leg.kickoff < earliest ? leg.kickoff : earliest), draft.legs[0]!.kickoff);
     await db.$transaction(async (tx) => {
       const version = await tx.ticketVersion.create({

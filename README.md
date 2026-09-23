@@ -61,7 +61,9 @@ only signals intent — it doesn't guarantee the database is empty or exclusive 
 - `PUBLISH_TICKETS` first generates `Prediction` rows for fixtures kicking off in the next 20 hours
   (`apps/jobs/src/predict.ts`), then builds candidate legs from fresh pre-kickoff quotes and calls the
   existing `buildTickets` tier logic, inserting `TicketVersion`/`TicketLeg` rows (or a successor version if
-  the prior one for that date/tier isn't locked yet).
+  the prior one for that date/tier isn't locked yet). Tiers never share a fixture (in any market), including
+  with that day's tickets that stay live, so one losing match can't sink several tickets. STANDARD is filled
+  first; a tier is skipped rather than relaxing its confidence threshold just to find unused fixtures.
 - `SETTLE_RESULTS` resolves locked, unsettled ticket versions once every leg's fixture is `FINISHED` (or
   voids the ticket if any leg's fixture was postponed/cancelled) and inserts exactly one `Settlement` row —
   matching the database triggers, which reject every other update to `TicketVersion`/`TicketLeg`.
