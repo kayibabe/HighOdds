@@ -197,6 +197,145 @@ describe.skipIf(!databaseUrl)("publishTickets and settleResults (live DB)", () =
     });
   });
 
+  describe("tier disjointness: one publish run never puts a fixture on two tiers", () => {
+    const RUN_SEED = randomInt(1, 90_000);
+    const BASE = 600_000_000 + RUN_SEED * 1000;
+    const POOL_SIZE = 10;
+    const HISTORY_TARGET = 50;
+    // Separate from the full-pipeline scenario's date range offset so the two suites' targetDates
+    // (and selection windows) don't meet on the same run.
+    const now = new Date(Date.UTC(2026, 1, 1, 9, 0, 0) + RUN_SEED * 24 * 60 * 60 * 1000);
+    const capturedAt = new Date(now.getTime() - 30 * 60 * 1000);
+    // Lower than the full-pipeline scenario's 1.3: at 1.3 three legs (~21.2) overshoot VALUE into HIGH.
+    const HOME_GENEROSITY = 1.2;
+
+    const competitionIds: string[] = [];
+    const modelRunIds: string[] = [];
+    const scenarioFixtureIds: string[] = [];
+    let bookmakerId: string;
+    let marketId: string;
+    let homeOdds: number;
+
+    // Same eligible-league recipe as the full-pipeline scenario: 50 FINISHED fixtures (every team
+    // 9+ appearances) plus a hand-crafted, uniform-strength ModelRun, so every scenario fixture
+    // gets the exact same HOME probability and therefore the exact same HOME odds and EV.
+    async function seedEligibleCompetition(base: number, name: string): Promise<{ competitionId: string; teamIds: string[]; strengths: TeamStrengths }> {
+      const competition = await db.competition.create({ data: { providerId: base + 1, name, country: null } });
+      const teamIds: string[] = [];
+      for (let i = 0; i < POOL_SIZE; i += 1) {
+        teamIds.push((await db.team.create({ data: { providerId: base + 10 + i, name: `${name} Team ${i}` } })).id);
+      }
+      const pairs: Array<[number, number]> = [];
+      for (let i = 0; i < POOL_SIZE; i += 1) for (let j = i + 1; j < POOL_SIZE; j += 1) pairs.push([i, j]);
+      while (pairs.length < HISTORY_TARGET) pairs.push(pairs[pairs.length - 45]!);
+      let providerId = base + 100;
+      let daysAgo = HISTORY_TARGET;
+      for (const [i, j] of pairs) {
+        await db.fixture.create({
+          data: {
+            providerId: providerId++, competitionId: competition.id, homeTeamId: teamIds[i]!, awayTeamId: teamIds[j]!,
+            kickoff: new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000), status: "FINISHED", homeGoals: 1, awayGoals: 0
+          }
+        });
+        daysAgo -= 1;
+      }
+      const strengths: TeamStrengths = {
+        homeAdvantage: 1.3,
+        leagueAverageGoals: 1.4,
+        teams: Object.fromEntries(teamIds.map((id) => [id, { attack: 1, defense: 1, matchCount: HISTORY_TARGET }]))
+      };
+      const modelRun = await db.modelRun.create({ data: { competitionId: competition.id, version: "test", method: "dixon-coles-ipf-v1", trainedUntil: now, artifact: strengths as unknown as object } });
+      competitionIds.push(competition.id);
+      modelRunIds.push(modelRun.id);
+      return { competitionId: competition.id, teamIds, strengths };
+    }
+
+    beforeAll(async () => {
+      const leagueA = await seedEligibleCompetition(BASE, "Synthetic Disjoint League A");
+      const leagueB = await seedEligibleCompetition(BASE + 500, "Synthetic Disjoint League B");
+
+      // Five scenario fixtures, three in league A and two in league B, kicking off hourly. With
+      // identical HOME odds (~2.56) STANDARD wants 2 legs (~6.5) and VALUE wants 3 (~16.7). Every
+      // HOME candidate has the same EV, so tiers built independently would both start from the same
+      // top-ranked fixtures -- exactly the overlap #18 forbids.
+      const scenario: Array<[{ competitionId: string; teamIds: string[] }, number, number]> = [
+        [leagueA, 0, 1], [leagueA, 2, 3], [leagueA, 4, 5], [leagueB, 0, 1], [leagueB, 2, 3]
+      ];
+      for (const [index, [league, home, away]] of scenario.entries()) {
+        const fixture = await db.fixture.create({
+          data: {
+            providerId: BASE + 200 + index, competitionId: league.competitionId, homeTeamId: league.teamIds[home]!, awayTeamId: league.teamIds[away]!,
+            kickoff: new Date(now.getTime() + (2 + index) * 60 * 60 * 1000), status: "SCHEDULED"
+          }
+        });
+        scenarioFixtureIds.push(fixture.id);
+      }
+
+      const bookmaker = await db.bookmaker.create({ data: { providerId: BASE + 300, name: "Synthetic Disjoint Bookmaker", priority: 1, active: true } });
+      bookmakerId = bookmaker.id;
+      const market = await db.market.create({ data: { providerId: BASE + 310, name: "Match Winner", normalizedKey: "MATCH_WINNER", selectionEnabled: true } });
+      marketId = market.id;
+
+      const goals = expectedGoals(leagueA.teamIds[0]!, leagueA.teamIds[1]!, leagueA.strengths);
+      const dist = dixonColesDistribution(goals.home, goals.away);
+      homeOdds = HOME_GENEROSITY / dist.homeWin;
+      // Preconditions the scenario depends on: 2 legs land in STANDARD, 3 legs land in VALUE.
+      expect(homeOdds ** 2).toBeGreaterThanOrEqual(5);
+      expect(homeOdds ** 2).toBeLessThan(10);
+      expect(homeOdds ** 3).toBeGreaterThanOrEqual(10);
+      expect(homeOdds ** 3).toBeLessThan(20);
+
+      await generatePredictions(now);
+      // generatePredictions may attach predictions to a leftover MATCH_WINNER market from an
+      // aborted earlier run; quote against whichever market it actually used.
+      marketId = (await db.prediction.findFirstOrThrow({ where: { fixtureId: scenarioFixtureIds[0]!, selection: "HOME" } })).marketId;
+
+      for (const fixtureId of scenarioFixtureIds) {
+        for (const [selection, decimalOdds] of [["HOME", homeOdds], ["DRAW", 1 / dist.draw], ["AWAY", 1 / dist.awayWin]] as const) {
+          await db.oddsQuote.create({ data: { fixtureId, bookmakerId, marketId, selection, decimalOdds, capturedAt } });
+        }
+      }
+    });
+
+    afterAll(async () => {
+      await db.prediction.deleteMany({ where: { fixtureId: { in: scenarioFixtureIds } } });
+      await db.modelRun.deleteMany({ where: { id: { in: modelRunIds } } });
+      await db.oddsQuote.deleteMany({ where: { fixtureId: { in: scenarioFixtureIds } } });
+      await db.market.deleteMany({ where: { id: marketId } });
+      await db.bookmaker.deleteMany({ where: { id: bookmakerId } });
+    });
+
+    it("publishes STANDARD and VALUE tickets whose persisted legs share no fixture", async () => {
+      const result = await publishTickets(now);
+      expect(result.published).toBeGreaterThanOrEqual(2);
+
+      const versions = await db.ticketVersion.findMany({ where: { bookmakerId }, include: { legs: true } });
+      const byTier = new Map(versions.map((version) => [version.tier, version]));
+      expect([...byTier.keys()].sort()).toEqual(["STANDARD", "VALUE"]);
+      expect(byTier.get("STANDARD")!.legs).toHaveLength(2);
+      expect(byTier.get("VALUE")!.legs).toHaveLength(3);
+      expect(Number(byTier.get("VALUE")!.combinedOdds)).toBeCloseTo(homeOdds ** 3, 3);
+
+      // The actual #18 guarantee, checked on persisted TicketLeg rows: every fixture appears on at
+      // most one ticket, and together the two tickets use all five scenario fixtures.
+      const legFixtureIds = versions.flatMap((version) => version.legs.map((leg) => leg.fixtureId));
+      expect(new Set(legFixtureIds).size).toBe(legFixtureIds.length);
+      expect(new Set(legFixtureIds)).toEqual(new Set(scenarioFixtureIds));
+    });
+
+    it("keeps tiers disjoint when a re-run replaces the unlocked tickets", async () => {
+      // Same day, still before the first kickoff: both tickets are unlocked, so the re-run
+      // supersedes them. The live (unsuperseded) set must still be fixture-disjoint.
+      const rerunNow = new Date(now.getTime() + 10 * 60 * 1000);
+      await publishTickets(rerunNow);
+
+      const live = await db.ticketVersion.findMany({ where: { bookmakerId, successors: { none: {} } }, include: { legs: true } });
+      expect(live.map((version) => version.tier).sort()).toEqual(["STANDARD", "VALUE"]);
+      const legFixtureIds = live.flatMap((version) => version.legs.map((leg) => leg.fixtureId));
+      expect(new Set(legFixtureIds).size).toBe(legFixtureIds.length);
+    });
+  });
+
   describe("settleResults outcomes independent of publishTickets", () => {
     async function createStandaloneTicket(fixtureStatus: "POSTPONED" | "FINISHED" | "SCHEDULED", homeGoals: number | null, awayGoals: number | null, lockAt: Date) {
       const seed = randomInt(1, 90_000);
