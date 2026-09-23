@@ -103,9 +103,7 @@ header {
   top: 0;
   z-index: 10;
   height: 60px;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 max(24px, calc((100% - 1052px) / 2));
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -125,9 +123,12 @@ nav { display: flex; align-items: center; gap: 4px; }
 
 nav a, nav button.link-button {
   height: 32px;
+  margin: 0;
   padding: 0 12px;
   display: inline-flex;
   align-items: center;
+  border: none;
+  background: none;
   border-radius: var(--r-sm);
   color: var(--muted);
   font-size: 13px;
@@ -135,7 +136,12 @@ nav a, nav button.link-button {
   transition: background 0.15s, color 0.15s;
 }
 
-nav a:hover, nav button.link-button:hover { background: var(--accent-bg); color: var(--accent); }
+nav a:hover, nav button.link-button:hover { background: var(--accent-bg); color: var(--accent); filter: none; }
+nav form { display: flex; }
+
+main p a { color: var(--accent); font-weight: 600; }
+main p a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ── Layout ───────────────────────────────────────────────── */
 main {
@@ -237,8 +243,9 @@ h2 { font-size: 1.15rem; letter-spacing: -0.01em; margin: 32px 0 12px; }
 
 .legs { list-style: none; margin: 14px 0; display: grid; gap: 0; }
 .legs li {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  align-items: baseline;
   gap: 12px;
   border-bottom: 1px solid var(--border2);
   padding: 9px 0;
@@ -246,10 +253,19 @@ h2 { font-size: 1.15rem; letter-spacing: -0.01em; margin: 32px 0 12px; }
 }
 .legs li:last-child { border-bottom: none; padding-bottom: 0; }
 .legs li span:first-child { color: var(--text); font-weight: 500; }
-.legs li span:last-child { font-variant-numeric: tabular-nums; font-weight: 700; }
+.legs li span:nth-child(2) { color: var(--text2); }
+.legs li span:last-child { font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; }
+
+.matches-section { margin-top: 44px; }
+.matches-section > p { color: var(--text2); font-size: 13px; }
+.matches-table-wrap { overflow-x: auto; }
+.matches-table { min-width: 660px; }
+.matches-table td:first-child, .matches-table td:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* ── Forms ────────────────────────────────────────────────── */
 .sign-in { max-width: 460px; }
+.sign-in > p:not(.eyebrow) { color: var(--text2); margin-bottom: 22px; }
+.eyebrow + h2 { margin-top: 6px; }
 label { display: grid; gap: 8px; margin-bottom: 16px; font-size: 13px; color: var(--text2); font-weight: 600; }
 input {
   border-radius: var(--r-sm);
@@ -286,7 +302,7 @@ th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--bo
 th { color: var(--muted); font-weight: 700; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; background: var(--surface2); }
 tr:last-child td { border-bottom: none; }
 table form { display: inline; margin: 0; }
-table button {
+table button[type="submit"] {
   margin-top: 0;
   padding: 6px 11px;
   font-size: 12px;
@@ -295,24 +311,49 @@ table button {
   background: var(--surface2);
   color: var(--text2);
   font-weight: 600;
+  white-space: nowrap;
   transition: border-color 0.12s, color 0.12s;
 }
-table button:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+table button[type="submit"]:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); filter: none; }
+.matches-table-wrap table { margin-bottom: 14px; }
 
 .link-button { background: none; border: none; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; }
 
 /* ── Results list ─────────────────────────────────────────── */
-.tickets { list-style: none; display: grid; gap: 10px; }
+.grid + p { margin-top: 20px; color: var(--text2); font-size: 13.5px; }
+.tickets { list-style: none; display: grid; gap: 10px; margin-top: 20px; }
 .tickets li {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 16px;
   border: 1px solid var(--border);
   border-radius: var(--r);
   background: var(--surface);
   padding: 12px 16px;
   font-size: 13px;
 }
+
+.tickets li span:not(.status-badge) { font-variant-numeric: tabular-nums; font-weight: 700; }
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 3px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.status-badge.win { border-color: color-mix(in srgb, var(--positive) 36%, var(--border)); background: color-mix(in srgb, var(--positive) 11%, var(--surface)); color: var(--positive); }
+.status-badge.loss { border-color: color-mix(in srgb, var(--negative) 36%, var(--border)); background: color-mix(in srgb, var(--negative) 9%, var(--surface)); color: var(--negative); }
+.status-badge.void { border-color: color-mix(in srgb, var(--warning) 36%, var(--border)); background: color-mix(in srgb, var(--warning) 9%, var(--surface)); color: var(--warning); }
 
 /* ── Theme toggle ─────────────────────────────────────────── */
 .theme-btn {
@@ -337,9 +378,13 @@ table button:hover { border-color: var(--accent); color: var(--accent); backgrou
 @media (max-width: 650px) {
   .grid { grid-template-columns: 1fr; }
   main { padding-top: 28px; }
-  table { font-size: 12px; }
+  table { font-size: 12px; display: block; overflow-x: auto; }
+  .matches-table { display: table; }
   th, td { padding: 8px 8px; }
-  .legs li { flex-direction: column; gap: 2px; }
-  header { padding: 0 16px; }
-  nav { gap: 0; }
+  .legs li { grid-template-columns: 1fr; gap: 2px; }
+  .legs li span:last-child { text-align: left; }
+  header { height: auto; flex-wrap: wrap; row-gap: 6px; padding: 10px 16px 8px; }
+  nav { gap: 0; width: 100%; overflow-x: auto; }
+  nav a, nav button.link-button { white-space: nowrap; flex-shrink: 0; }
+  nav .theme-btn { margin-left: auto; flex-shrink: 0; }
 }
