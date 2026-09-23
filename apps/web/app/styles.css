@@ -298,20 +298,27 @@ h2 { font-size: 1.15rem; letter-spacing: -0.01em; margin: 32px 0 12px; }
 
 .meta { color: var(--muted); font-size: 12.5px; margin: 10px 0; }
 
+.ticket-summary { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 12px 0; color: var(--text2); font-size: 12px; border-top: 1px solid var(--border); }
+.ticket-summary strong { color: var(--text); }
+.ticket-paper-label { margin-left: auto; color: var(--accent); font-weight: 700; }
+.ticket-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 0; }
+
 .legs { list-style: none; margin: 14px 0; display: grid; gap: 0; }
 .legs li {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
-  align-items: baseline;
+  align-items: start;
   gap: 12px;
   border-bottom: 1px solid var(--border2);
   padding: 9px 0;
   font-size: 13px;
 }
 .legs li:last-child { border-bottom: none; padding-bottom: 0; }
-.legs li span:first-child { color: var(--text); font-weight: 500; }
-.legs li span:nth-child(2) { color: var(--text2); }
-.legs li span:last-child { font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; }
+.leg-fixture, .leg-pick { display: grid; gap: 3px; min-width: 0; }
+.leg-fixture strong, .leg-pick strong { color: var(--text); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.leg-pick strong { color: var(--text2); }
+.leg-fixture small, .leg-pick small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.leg-price { color: var(--text); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 
 .matches-section { margin-top: 44px; }
 .matches-section > p { color: var(--text2); font-size: 13px; }
@@ -530,7 +537,8 @@ button.theme-btn, a.theme-btn { width: auto; min-width: 42px; margin: 0; padding
   .matches-table { display: table; }
   th, td { padding: 8px 8px; }
   .legs li { grid-template-columns: 1fr; gap: 2px; }
-  .legs li span:last-child { text-align: left; }
+  .leg-price { text-align: left; }
+  .ticket-paper-label { margin-left: 0; }
   .auth-standalone { padding: 56px 12px 16px; }
   .auth-card { border-radius: 18px; }
 }
