@@ -1,27 +1,26 @@
 import { redirect } from "next/navigation";
 import { db } from "@highodds/db";
 import { auth } from "../../auth";
+import TicketBoard, { type TicketCardData } from "./ticket-board";
 
 export const dynamic = "force-dynamic";
 
-const TIER_LABEL: Record<string, string> = { STANDARD: "Standard", VALUE: "Value", HIGH: "High" };
+type DecisionLeg = {
+  fixtureId: string; market: string; selection: string; decimalOdds: number;
+  modelProbability: number; consensusProbability: number; confidenceScore: number
+};
 
-function fmtTime(date: Date): string {
-  return date.toISOString().replace("T", " ").slice(0, 16) + " UTC";
-}
-
-const LOCAL_DATE_TIME = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Africa/Blantyre", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
-});
-
-function selectionLabel(selection: string): string {
-  if (selection === "HOME") return "Home win";
-  if (selection === "AWAY") return "Away win";
-  if (selection === "DRAW") return "Draw";
-  if (selection === "YES") return "Yes";
-  if (selection === "NO") return "No";
-  const total = /^(OVER|UNDER)_(\d+)_(\d+)$/.exec(selection);
-  return total ? `${total[1] === "OVER" ? "Over" : "Under"} ${total[2]}.${total[3]}` : selection;
+function decisionLegs(value: unknown): DecisionLeg[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is DecisionLeg => {
+    if (!item || typeof item !== "object") return false;
+    const row = item as Record<string, unknown>;
+    return typeof row.fixtureId === "string" && typeof row.market === "string" && typeof row.selection === "string"
+      && typeof row.decimalOdds === "number" && Number.isFinite(row.decimalOdds)
+      && typeof row.modelProbability === "number" && row.modelProbability >= 0 && row.modelProbability <= 1
+      && typeof row.consensusProbability === "number" && row.consensusProbability >= 0 && row.consensusProbability <= 1
+      && typeof row.confidenceScore === "number" && row.confidenceScore >= 0 && row.confidenceScore <= 100;
+  });
 }
 
 const BLANTYRE_TIME = new Intl.DateTimeFormat("en-GB", {
@@ -74,6 +73,32 @@ export default async function DashboardPage() {
   ]);
   const bookmakerNameById = new Map(bookmakers.map((bookmaker) => [bookmaker.id, bookmaker.name]));
   const quoteTimeById = new Map(quotes.map((quote) => [quote.id, quote.capturedAt]));
+  const cardData: TicketCardData[] = tickets.map((ticket) => {
+    const decisions = decisionLegs(ticket.decision);
+    return {
+      id: ticket.id, tier: ticket.tier, combinedOdds: Number(ticket.combinedOdds),
+      confidenceThreshold: ticket.confidenceThreshold, relaxed: ticket.relaxed,
+      publishedAt: ticket.publishedAt.toISOString(), lockAt: ticket.lockAt.toISOString(),
+      bookmaker: bookmakerNameById.get(ticket.bookmakerId) ?? null,
+      outcome: ticket.settlements[0]?.outcome ?? "PENDING",
+      legs: ticket.legs.map((leg) => {
+        const odds = Number(leg.decimalOdds);
+        const probability = Number(leg.probability);
+        const snapshot = decisions.find((item) => item.fixtureId === leg.fixtureId && item.market === leg.marketKey
+          && item.selection === leg.selection && Math.abs(item.decimalOdds - odds) < 0.0001
+          && Math.abs(item.modelProbability - probability) < 0.000001);
+        return {
+          id: leg.id, home: leg.fixture.homeTeam.name, away: leg.fixture.awayTeam.name,
+          competition: leg.fixture.competition.name, kickoff: leg.fixture.kickoff.toISOString(),
+          fixtureStatus: leg.fixture.status, homeGoals: leg.fixture.homeGoals, awayGoals: leg.fixture.awayGoals,
+          market: marketNameByKey.get(leg.marketKey) ?? leg.marketKey, selection: leg.selection,
+          odds, probability, quoteCapturedAt: quoteTimeById.get(leg.quoteId)?.toISOString() ?? null,
+          consensusProbability: snapshot?.consensusProbability ?? null,
+          agreementScore: snapshot?.confidenceScore ?? null
+        };
+      }).sort((a, b) => a.kickoff.localeCompare(b.kickoff) || a.id.localeCompare(b.id))
+    };
+  });
 
   return (
     <section>
@@ -83,41 +108,7 @@ export default async function DashboardPage() {
       <p><a href="#matches-title">View {fixtures.length} matches for {localDay.label} (Blantyre time)</a></p>
 
       {tickets.length === 0 && <div className="notice">No qualified selections today. Insufficient evidence to publish a paper ticket.</div>}
-
-      <div className="ticket-cards">
-        {tickets.map((ticket) => (
-          <article key={ticket.id} className="ticket-card">
-            <div className="ticket-card-head">
-              <h2>{TIER_LABEL[ticket.tier] ?? ticket.tier}</h2>
-              <span className="badge" aria-label={`Combined decimal odds ${Number(ticket.combinedOdds).toFixed(2)}`}>{Number(ticket.combinedOdds).toFixed(2)}×</span>
-            </div>
-            <p className="meta">
-              Confidence &ge; {ticket.confidenceThreshold}%{ticket.relaxed && <span className="tag">relaxed criteria</span>} &middot; locks {fmtTime(ticket.lockAt)}
-            </p>
-            <div className="ticket-summary">
-              <span><strong>{ticket.legs.length}</strong> legs</span>
-              <span>Bookmaker <strong>{bookmakerNameById.get(ticket.bookmakerId) ?? "Recorded bookmaker"}</strong></span>
-              <span className="ticket-paper-label">Paper research</span>
-            </div>
-            <ul className="legs" aria-label={`${TIER_LABEL[ticket.tier] ?? ticket.tier} ticket legs`}>
-              {ticket.legs.map((leg) => (
-                <li key={leg.id}>
-                  <div className="leg-fixture">
-                    <strong>{leg.fixture.homeTeam.name} vs {leg.fixture.awayTeam.name}</strong>
-                    <small>{leg.fixture.competition.name} · {LOCAL_DATE_TIME.format(leg.fixture.kickoff)} CAT</small>
-                  </div>
-                  <div className="leg-pick">
-                    <strong>{marketNameByKey.get(leg.marketKey) ?? leg.marketKey}: {selectionLabel(leg.selection)}</strong>
-                    <small>Model estimate {(Number(leg.probability) * 100).toFixed(1)}% · {quoteTimeById.has(leg.quoteId) ? `Odds captured ${fmtTime(quoteTimeById.get(leg.quoteId)!)}` : "Quote time unavailable"}</small>
-                  </div>
-                  <strong className="leg-price">{Number(leg.decimalOdds).toFixed(2)}×</strong>
-                </li>
-              ))}
-            </ul>
-            <p className="meta ticket-footer">Published {fmtTime(ticket.publishedAt)} &middot; <span className={`status-badge ${(ticket.settlements[0]?.outcome ?? "PENDING").toLowerCase()}`}>{ticket.settlements[0]?.outcome ?? "PENDING"}</span></p>
-          </article>
-        ))}
-      </div>
+      <TicketBoard tickets={cardData} />
 
       <section className="matches-section" aria-labelledby="matches-title">
         <h2 id="matches-title">Today&apos;s matches</h2>
