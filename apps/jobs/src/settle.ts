@@ -1,5 +1,5 @@
 import { db } from "@highodds/db";
-import { resolveSelection } from "./markets.js";
+import { resolveSelection } from "@highodds/core";
 import { ApiFootballClient } from "./api-football.js";
 import { ingestFixtures } from "./ingestion.js";
 

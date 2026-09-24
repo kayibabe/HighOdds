@@ -36,23 +36,5 @@ export function normalizeSelection(market: SupportedMarket, providerValue: strin
   return null;
 }
 
-/** Resolves a settled leg to WIN/LOSS from final scoreline; null if the market/selection is unresolvable. */
-export function resolveSelection(marketKey: string, selection: string, homeGoals: number, awayGoals: number): "WIN" | "LOSS" | null {
-  if (marketKey === "MATCH_WINNER") {
-    const result = homeGoals > awayGoals ? "HOME" : homeGoals < awayGoals ? "AWAY" : "DRAW";
-    return selection === result ? "WIN" : "LOSS";
-  }
-  if (marketKey === "TOTAL_GOALS") {
-    const over = homeGoals + awayGoals >= 3;
-    if (selection === "OVER_2_5") return over ? "WIN" : "LOSS";
-    if (selection === "UNDER_2_5") return over ? "LOSS" : "WIN";
-    return null;
-  }
-  if (marketKey === "BTTS") {
-    const btts = homeGoals > 0 && awayGoals > 0;
-    if (selection === "YES") return btts ? "WIN" : "LOSS";
-    if (selection === "NO") return btts ? "LOSS" : "WIN";
-    return null;
-  }
-  return null;
-}
+// Leg resolution lives in @highodds/core so the web pages can explain settled tickets with the same rules.
+export { resolveSelection } from "@highodds/core";
