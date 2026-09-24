@@ -6,6 +6,7 @@
   "scripts": {
     "jobs:run-due": "tsx src/run-due.ts",
     "jobs:backfill-fixtures": "tsx src/backfill-fixtures-cli.ts",
+    "jobs:settle-played": "tsx src/settle-played-cli.ts",
     "lint": "tsc --noEmit",
     "test": "vitest run"
   },

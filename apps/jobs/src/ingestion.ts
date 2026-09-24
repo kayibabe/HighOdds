@@ -14,11 +14,14 @@ type ProviderOdds = {
   bookmakers?: Array<{ id?: number; name?: string; bets?: Array<{ id?: number; name?: string; values?: Array<{ value?: string; odd?: string }> }> }>;
 };
 
-function fixtureStatus(shortStatus?: string): "SCHEDULED" | "LIVE" | "FINISHED" | "POSTPONED" | "CANCELLED" {
-  if (["FT", "AET", "PEN"].includes(shortStatus ?? "")) return "FINISHED";
-  if (["PST", "SUSP", "ABD"].includes(shortStatus ?? "")) return "POSTPONED";
-  if (["CANC", "AWD", "WO"].includes(shortStatus ?? "")) return "CANCELLED";
-  if (["1H", "HT", "2H", "ET", "BT", "P"].includes(shortStatus ?? "")) return "LIVE";
+// The provider occasionally sends non-canonical short codes on older fixtures ("Canc", "Abandoned"),
+// so match case-insensitively and accept those spellings too.
+export function fixtureStatus(shortStatus?: string): "SCHEDULED" | "LIVE" | "FINISHED" | "POSTPONED" | "CANCELLED" {
+  const code = (shortStatus ?? "").trim().toUpperCase();
+  if (["FT", "AET", "PEN"].includes(code)) return "FINISHED";
+  if (["PST", "SUSP", "ABD", "ABANDONED"].includes(code)) return "POSTPONED";
+  if (["CANC", "AWD", "WO"].includes(code)) return "CANCELLED";
+  if (["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"].includes(code)) return "LIVE";
   return "SCHEDULED";
 }
 
