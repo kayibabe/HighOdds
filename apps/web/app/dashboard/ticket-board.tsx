@@ -20,11 +20,19 @@ export type TicketLegData = {
   quoteCapturedAt: string | null;
   consensusProbability: number | null;
   agreementScore: number | null;
+  /** WIN / LOSS / VOID / PENDING / UNRESOLVED for this leg alone. */
+  outcome: string;
+  /** "settlement" = read from the immutable settlement evidence; "live" = previewed from fixture state. */
+  outcomeSource: "settlement" | "live";
+  settledScore: string | null;
+  /** True when this leg decided (or is deciding) the ticket outcome. */
+  decisive: boolean;
 };
 
 export type TicketCardData = {
   id: string;
   tier: string;
+  targetDate: string;
   combinedOdds: number;
   confidenceThreshold: number;
   relaxed: boolean;
@@ -32,6 +40,9 @@ export type TicketCardData = {
   lockAt: string;
   bookmaker: string | null;
   outcome: string;
+  profitUnits: number | null;
+  /** Plain-language explanation of which legs decided the ticket. */
+  attribution: string;
   legs: TicketLegData[];
 };
 
@@ -39,13 +50,16 @@ type SelectedLeg = { ticket: TicketCardData; leg: TicketLegData };
 type DetailView = "overview" | "probability" | "odds" | "result";
 
 const TIER_LABEL: Record<string, string> = { STANDARD: "Standard", VALUE: "Value", HIGH: "High" };
-const LOCAL_TIME = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Africa/Blantyre", weekday: "short", day: "2-digit", month: "short",
-  hour: "2-digit", minute: "2-digit", hourCycle: "h23"
-});
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const two = (value: number) => String(value).padStart(2, "0");
 
+// Formatted by hand rather than with Intl: this component renders on the server (Node) and hydrates
+// in the browser, and their ICU data disagree on en-GB punctuation ("Thu 24 Sept" vs "Thu, 24 Sept"),
+// which caused a hydration mismatch. Africa/Blantyre is UTC+02:00 year round.
 function time(iso: string): string {
-  return `${LOCAL_TIME.format(new Date(iso))} CAT`;
+  const local = new Date(Date.parse(iso) + 2 * 60 * 60 * 1000);
+  return `${WEEKDAYS[local.getUTCDay()]} ${two(local.getUTCDate())} ${MONTHS[local.getUTCMonth()]}, ${two(local.getUTCHours())}:${two(local.getUTCMinutes())} CAT`;
 }
 
 function utcTime(iso: string): string {
@@ -78,6 +92,22 @@ function matchState(leg: TicketLegData): string {
 
 function scoreline(leg: TicketLegData): string {
   return leg.homeGoals !== null && leg.awayGoals !== null ? `${leg.homeGoals}–${leg.awayGoals}` : "—";
+}
+
+const LEG_OUTCOME_LABEL: Record<string, string> = { WIN: "Won", LOSS: "Lost", VOID: "Void", PENDING: "Pending", UNRESOLVED: "Unresolved" };
+
+function LegOutcomeBadge({ leg }: { leg: TicketLegData }) {
+  return <span className={`status-badge leg-outcome ${leg.outcome.toLowerCase()}`}>{LEG_OUTCOME_LABEL[leg.outcome] ?? leg.outcome}</span>;
+}
+
+function decisiveNote(ticket: TicketCardData, leg: TicketLegData): string | null {
+  if (!leg.decisive) return null;
+  if (ticket.outcome === "WIN") return "Contributed to the win";
+  if (ticket.outcome === "LOSS") return "Cost the ticket";
+  if (ticket.outcome === "VOID") return "Voided the ticket";
+  if (leg.outcome === "LOSS") return "Beats the ticket";
+  if (leg.outcome === "VOID") return "Will void the ticket";
+  return null;
 }
 
 function DetailPanel({ selected, onClose }: { selected: SelectedLeg; onClose: () => void }) {
@@ -138,6 +168,7 @@ function DetailPanel({ selected, onClose }: { selected: SelectedLeg; onClose: ()
         <div className="selection-panel-chips">
           <span className="selection-chip">{TIER_LABEL[ticket.tier] ?? ticket.tier} ticket</span>
           <span className="selection-chip">{ticket.outcome.toLowerCase()} ticket</span>
+          <span className={`selection-chip leg-chip ${leg.outcome.toLowerCase()}`}>Leg {(LEG_OUTCOME_LABEL[leg.outcome] ?? leg.outcome).toLowerCase()}</span>
           {ticket.relaxed && <span className="selection-chip caution">Relaxed criteria</span>}
         </div>
 
@@ -203,9 +234,15 @@ function DetailPanel({ selected, onClose }: { selected: SelectedLeg; onClose: ()
             <dl>
               <div><dt>Match state</dt><dd>{matchState(leg)}</dd></div>
               <div><dt>Stored score</dt><dd>{score ?? "Not recorded"}</dd></div>
+              {leg.outcomeSource === "settlement" && leg.settledScore !== score && <div><dt>Score at settlement</dt><dd>{leg.settledScore ?? "Not recorded"}</dd></div>}
+              <div><dt>This leg</dt><dd><LegOutcomeBadge leg={leg} /></dd></div>
               <div><dt>Whole ticket outcome</dt><dd>{ticket.outcome.toLowerCase()}</dd></div>
+              <div><dt>Role in the ticket</dt><dd>{decisiveNote(ticket, leg) ?? (ticket.outcome === "PENDING" ? "Not decisive yet" : "Not decisive")}</dd></div>
             </dl>
-            <p>HighOdds records settlement at ticket level. A separate settlement outcome for this leg is not stored.</p>
+            <p>{ticket.attribution}</p>
+            <p>{leg.outcomeSource === "settlement"
+              ? "This leg's result is read from the settlement evidence recorded when the ticket settled."
+              : "The ticket has not settled; this leg's result is a preview from the latest stored fixture state and can change until settlement."}</p>
           </>}
         </div>
       </section>
@@ -213,7 +250,9 @@ function DetailPanel({ selected, onClose }: { selected: SelectedLeg; onClose: ()
   );
 }
 
-export default function TicketBoard({ tickets }: { tickets: TicketCardData[] }) {
+export default function TicketBoard({ tickets, eyebrow = "PRIMARY RESEARCH OUTPUT", title = "Published recommendations", showDate = false }: {
+  tickets: TicketCardData[]; eyebrow?: string; title?: string; showDate?: boolean;
+}) {
   const [selected, setSelected] = useState<SelectedLeg | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const close = () => {
@@ -226,8 +265,8 @@ export default function TicketBoard({ tickets }: { tickets: TicketCardData[] }) 
   return (
     <>
       <div className="ticket-board-heading">
-        <div><p className="eyebrow">PRIMARY RESEARCH OUTPUT</p><h2>Published recommendations</h2></div>
-        <p>Open a match for its recorded model, market, odds, and result details.</p>
+        <div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div>
+        <p>Each leg shows whether it won, lost, or was voided. Open a match for its recorded model, market, odds, and result details.</p>
       </div>
       <div className="ticket-cards">
         {tickets.map((ticket) => (
@@ -236,7 +275,9 @@ export default function TicketBoard({ tickets }: { tickets: TicketCardData[] }) 
               <div className="premium-ticket-title">
                 <h3><span className="tier-dot" />{TIER_LABEL[ticket.tier] ?? ticket.tier}</h3>
                 <div className="premium-ticket-tags">
-                  <span className="selection-chip">{ticket.outcome.toLowerCase()} · {ticket.legs.length} legs</span>
+                  {showDate && <span className="selection-chip">{ticket.targetDate}</span>}
+                  <span className={`status-badge ${ticket.outcome.toLowerCase()}`}>{ticket.outcome}</span>
+                  <span className="selection-chip">{ticket.legs.length} legs</span>
                   {ticket.relaxed && <span className="selection-chip caution">Relaxed criteria</span>}
                 </div>
               </div>
@@ -250,21 +291,26 @@ export default function TicketBoard({ tickets }: { tickets: TicketCardData[] }) 
                 <span>Bookmaker <strong>{ticket.bookmaker ?? "Unavailable"}</strong></span>
                 <span>Published {utcTime(ticket.publishedAt)}</span>
                 <span>Paper research</span>
+                {ticket.profitUnits !== null && <span>Result <strong>{ticket.profitUnits >= 0 ? "+" : ""}{ticket.profitUnits.toFixed(2)} u</strong></span>}
               </div>
+              <p className={`ticket-attribution ${ticket.outcome.toLowerCase()}`}>{ticket.attribution}</p>
             </div>
             <ul className="premium-leg-list" aria-label={`${TIER_LABEL[ticket.tier] ?? ticket.tier} ticket legs`}>
               {ticket.legs.map((leg) => {
                 const implied = leg.odds > 0 ? 1 / leg.odds : null;
                 const gap = implied === null ? null : (leg.probability - implied) * 100;
+                const note = decisiveNote(ticket, leg);
                 return (
-                  <li key={leg.id}>
-                    <button type="button" className="premium-leg-trigger" aria-haspopup="dialog" aria-label={`View evidence for ${leg.home} vs ${leg.away}`} onClick={(event) => { triggerRef.current = event.currentTarget; setSelected({ ticket, leg }); }}>
+                  <li key={leg.id} className={`leg-${leg.outcome.toLowerCase()}${leg.decisive ? " decisive" : ""}`}>
+                    <button type="button" className="premium-leg-trigger" aria-haspopup="dialog" aria-label={`View evidence for ${leg.home} vs ${leg.away} (leg ${(LEG_OUTCOME_LABEL[leg.outcome] ?? leg.outcome).toLowerCase()})`} onClick={(event) => { triggerRef.current = event.currentTarget; setSelected({ ticket, leg }); }}>
                       <span className="premium-leg-main">
                         <strong>{leg.home} <span>vs</span> {leg.away}</strong>
                         <small>{leg.competition} · {time(leg.kickoff)}</small>
                         <span className="premium-leg-market">{leg.market}: {selectionLabel(leg.selection)}</span>
                         <span className="premium-leg-market">{matchState(leg)} · Score {scoreline(leg)}</span>
+                        {note && <small className="leg-decisive-note">{note}</small>}
                       </span>
+                      <LegOutcomeBadge leg={leg} />
                       <span className="premium-leg-numbers">
                         <strong>{leg.odds.toFixed(2)}×</strong>
                         <small>Model {pct(leg.probability)}</small>
