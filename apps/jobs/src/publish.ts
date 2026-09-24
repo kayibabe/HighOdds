@@ -1,8 +1,8 @@
 import { db } from "@highodds/db";
-import { buildTicketsAround, conservativeExpectedValue, devigProbability, quoteIsFresh, type CandidateLeg, type SupportedMarket, type TicketTier } from "@highodds/core";
+import { buildTicketsAround, conservativeExpectedValue, devigProbability, quoteIsFresh, SELECTION_WINDOW_HOURS, type CandidateLeg, type SupportedMarket, type TicketTier } from "@highodds/core";
 import { generatePredictions } from "./predict.js";
 
-const SELECTION_WINDOW_MS = 20 * 60 * 60 * 1000;
+const SELECTION_WINDOW_MS = SELECTION_WINDOW_HOURS * 60 * 60 * 1000;
 
 const MARKET_OUTCOME_COUNT: Record<SupportedMarket, number> = { MATCH_WINNER: 3, TOTAL_GOALS: 2, BTTS: 2 };
 

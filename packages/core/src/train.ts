@@ -6,12 +6,19 @@ export interface TeamStrengths {
   teams: Record<string, { attack: number; defense: number; matchCount: number }>;
 }
 
+/** Method label persisted on every ModelRun this fitter produces. */
+export const MODEL_METHOD = "dixon-coles-ipf-v1";
+/** Fixed number of attack/defence/home-advantage update passes. */
+export const IPF_ITERATIONS = 30;
+/** Expected goals are clamped to at least this, so the Poisson projection stays defined. */
+export const EXPECTED_GOALS_FLOOR = 0.05;
+
 /**
  * Iterative proportional fitting for a Dixon-Coles-compatible Poisson model:
  * converges attack[home]*defense[away]*homeAdvantage*leagueAvg ~= observed home goals,
  * and attack[away]*defense[home]*leagueAvg ~= observed away goals.
  */
-export function fitTeamStrengths(matches: CompletedMatch[], iterations = 30): TeamStrengths {
+export function fitTeamStrengths(matches: CompletedMatch[], iterations = IPF_ITERATIONS): TeamStrengths {
   if (matches.length === 0) throw new Error("At least one completed match is required to fit strengths");
   const teamIds = new Set<string>();
   for (const match of matches) { teamIds.add(match.homeTeamId); teamIds.add(match.awayTeamId); }
@@ -73,7 +80,7 @@ export function expectedGoals(homeTeamId: string, awayTeamId: string, strengths:
   const away = strengths.teams[awayTeamId];
   if (!home || !away) throw new Error("Both teams must be present in the fitted strengths");
   return {
-    home: Math.max(0.05, strengths.leagueAverageGoals * home.attack * away.defense * strengths.homeAdvantage),
-    away: Math.max(0.05, strengths.leagueAverageGoals * away.attack * home.defense)
+    home: Math.max(EXPECTED_GOALS_FLOOR, strengths.leagueAverageGoals * home.attack * away.defense * strengths.homeAdvantage),
+    away: Math.max(EXPECTED_GOALS_FLOOR, strengths.leagueAverageGoals * away.attack * home.defense)
   };
 }

@@ -1,8 +1,8 @@
 import { db } from "@highodds/db";
-import { fitTeamStrengths, type CompletedMatch } from "@highodds/core";
+import { fitTeamStrengths, HISTORY_LOOKBACK_DAYS, LEAGUE_MIN_MATCHES, MODEL_METHOD, type CompletedMatch } from "@highodds/core";
 
-const LOOKBACK_MS = 365 * 24 * 60 * 60 * 1000;
-const MIN_MATCHES = 50;
+const LOOKBACK_MS = HISTORY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
+const MIN_MATCHES = LEAGUE_MIN_MATCHES;
 
 export class NoTrainingDataError extends Error {
   constructor(skipped: number) {
@@ -35,7 +35,7 @@ export async function trainModel(now: Date): Promise<{ trained: number; skipped:
       data: {
         competitionId: competition.id,
         version: now.toISOString(),
-        method: "dixon-coles-ipf-v1",
+        method: MODEL_METHOD,
         trainedUntil: now,
         artifact: strengths as unknown as object
       }

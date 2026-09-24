@@ -1,20 +1,15 @@
 import { db } from "@highodds/db";
+import { DAILY_JOB_SCHEDULE, JOB_LEASE_MINUTES, JOB_RETRY_MINUTES } from "@highodds/core";
 
-const FIVE_MINUTES = 5 * 60 * 1000;
-const LEASE_MS = 20 * 60 * 1000;
+const RETRY_MS = JOB_RETRY_MINUTES * 60 * 1000;
+const LEASE_MS = JOB_LEASE_MINUTES * 60 * 1000;
 
 export interface ClaimedJob { id: string; idempotencyKey: string; jobType: string; payload: unknown; attempts: number; }
 
 /** Creates idempotent daily jobs in UTC. 08:00 Africa/Blantyre is 06:00 UTC. */
 export async function ensureDailyJobs(now: Date): Promise<void> {
   const targetDate = now.toISOString().slice(0, 10);
-  const jobs = [
-    { jobType: "INGEST_FIXTURES", runAfter: new Date(`${targetDate}T00:05:00.000Z`) },
-    { jobType: "TRAIN_MODEL", runAfter: new Date(`${targetDate}T05:00:00.000Z`) },
-    { jobType: "INGEST_ODDS", runAfter: new Date(`${targetDate}T05:30:00.000Z`) },
-    { jobType: "PUBLISH_TICKETS", runAfter: new Date(`${targetDate}T06:00:00.000Z`) },
-    { jobType: "SETTLE_RESULTS", runAfter: new Date(`${targetDate}T21:00:00.000Z`) }
-  ];
+  const jobs = DAILY_JOB_SCHEDULE.map((job) => ({ jobType: job.jobType, runAfter: new Date(`${targetDate}T${job.utcTime}:00.000Z`) }));
   for (const job of jobs) {
     await db.jobRun.upsert({ where: { idempotencyKey: `${job.jobType}:${targetDate}` }, create: { idempotencyKey: `${job.jobType}:${targetDate}`, jobType: job.jobType, runAfter: job.runAfter }, update: {} });
   }
@@ -43,6 +38,6 @@ export async function claimDueJobs(now: Date, limit = 10): Promise<ClaimedJob[]>
 }
 
 export async function completeJob(id: string): Promise<void> { await db.jobRun.update({ where: { id }, data: { status: "DONE", completedAt: new Date(), leaseExpiresAt: null } }); }
-export async function failAndReleaseJob(id: string, error: unknown, retryAfterMs = FIVE_MINUTES): Promise<void> {
+export async function failAndReleaseJob(id: string, error: unknown, retryAfterMs = RETRY_MS): Promise<void> {
   await db.jobRun.update({ where: { id }, data: { status: "DUE", runAfter: new Date(Date.now() + retryAfterMs), leaseExpiresAt: null, lastError: error instanceof Error ? error.message.slice(0, 2_000) : String(error).slice(0, 2_000) } });
 }

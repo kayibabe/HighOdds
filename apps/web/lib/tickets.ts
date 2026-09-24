@@ -2,12 +2,13 @@ import { db } from "@highodds/db";
 import { attributeTicket, evidenceLegOutcome, legOutcome, parseSettlementEvidence, type TicketOutcome } from "@highodds/core";
 import type { TicketCardData } from "../app/dashboard/ticket-board";
 
-type DecisionLeg = {
+export type DecisionLeg = {
   fixtureId: string; market: string; selection: string; decimalOdds: number;
   modelProbability: number; consensusProbability: number; confidenceScore: number
 };
 
-function decisionLegs(value: unknown): DecisionLeg[] {
+/** Reads the per-leg snapshot PUBLISH_TICKETS stored on a TicketVersion; malformed rows are dropped. */
+export function decisionLegs(value: unknown): DecisionLeg[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is DecisionLeg => {
     if (!item || typeof item !== "object") return false;
