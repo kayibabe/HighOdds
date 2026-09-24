@@ -4,7 +4,7 @@ import { db } from "@highodds/db";
 import { dixonColesDistribution, expectedGoals, type TeamStrengths } from "@highodds/core";
 import { generatePredictions } from "../src/predict.js";
 import { publishTickets } from "../src/publish.js";
-import { refreshPendingResults, settleResults } from "../src/settle.js";
+import { refreshPendingResults, refreshStaleFixtures, settleResults } from "../src/settle.js";
 
 /**
  * Exercises publishTickets/settleResults end to end against a real local Postgres, the same way
@@ -460,6 +460,64 @@ describe.skipIf(!databaseUrl)("publishTickets and settleResults (live DB)", () =
       await refreshPendingResults(new Date(kickoff.getTime() + 60 * 60 * 1000), fakeClient);
 
       expect(requestedIds).not.toContain(fixture.providerId);
+    });
+  });
+
+  describe("refreshStaleFixtures", () => {
+    async function createStaleFixture(base: number, kickoff: Date) {
+      const competition = await db.competition.create({ data: { providerId: base + 1, name: "Synthetic Catch-up League", country: null } });
+      const homeTeam = await db.team.create({ data: { providerId: base + 2, name: "Synthetic Catch-up Home" } });
+      const awayTeam = await db.team.create({ data: { providerId: base + 3, name: "Synthetic Catch-up Away" } });
+      const fixture = await db.fixture.create({ data: { providerId: base + 4, competitionId: competition.id, homeTeamId: homeTeam.id, awayTeamId: awayTeam.id, kickoff, status: "SCHEDULED", receivedAt: new Date(kickoff.getTime() - 60 * 60 * 1000) } });
+      const record = (short: string, date = kickoff) => ({
+        fixture: { id: fixture.providerId, date: date.toISOString(), status: { short } },
+        league: { id: competition.providerId, name: "Synthetic Catch-up League", country: null },
+        teams: { home: { id: homeTeam.providerId, name: "Synthetic Catch-up Home" }, away: { id: awayTeam.providerId, name: "Synthetic Catch-up Away" } },
+        goals: { home: 1, away: 1 }
+      });
+      return { fixture, record };
+    }
+
+    // Unique far-future dates per run, so other runs' leftover stale fixtures never fall in the window.
+    function runDay(offsetDays: number): Date {
+      return new Date(Date.UTC(2040, 0, 1, 12) + (randomInt(1, 20_000) * 10 + offsetDays) * 24 * 60 * 60 * 1000);
+    }
+
+    it("re-fetches past stale fixtures by date within the lookback window and skips older ones", async () => {
+      const now = runDay(0);
+      const recent = await createStaleFixture(790_000_000 + randomInt(1, 90_000) * 1000, new Date(now.getTime() - 24 * 60 * 60 * 1000));
+      const old = await createStaleFixture(795_000_000 + randomInt(1, 90_000) * 1000, new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000));
+      const recentDate = recent.fixture.kickoff.toISOString().slice(0, 10);
+
+      const requests: Array<Record<string, string | number | undefined>> = [];
+      const fakeClient = {
+        getPaged: async (_endpoint: string, query: Record<string, string | number | undefined>) => {
+          requests.push(query);
+          return query.date === recentDate ? [recent.record("FT")] : [];
+        }
+      };
+
+      const result = await refreshStaleFixtures(now, fakeClient, { lookbackDays: 7 });
+      expect(result.dates).toEqual([recentDate]);
+      expect(requests.some((query) => query.date === old.fixture.kickoff.toISOString().slice(0, 10))).toBe(false);
+      expect((await db.fixture.findUniqueOrThrow({ where: { id: recent.fixture.id } })).status).toBe("FINISHED");
+      expect((await db.fixture.findUniqueOrThrow({ where: { id: old.fixture.id } })).status).toBe("SCHEDULED");
+    });
+
+    it("falls back to /fixtures?ids= for a stale fixture its date snapshot no longer returns", async () => {
+      const now = runDay(3);
+      const moved = await createStaleFixture(800_000_000 + randomInt(1, 90_000) * 1000, new Date(now.getTime() - 24 * 60 * 60 * 1000));
+
+      const fakeClient = {
+        getPaged: async (_endpoint: string, query: Record<string, string | number | undefined>) =>
+          query.ids !== undefined && String(query.ids).split("-").map(Number).includes(moved.fixture.providerId) ? [moved.record("Canc")] : []
+      };
+
+      const result = await refreshStaleFixtures(now, fakeClient, { lookbackDays: 7 });
+      expect(result.refreshedById).toBeGreaterThanOrEqual(1);
+      const updated = await db.fixture.findUniqueOrThrow({ where: { id: moved.fixture.id } });
+      expect(updated.status).toBe("CANCELLED");
+      expect(updated.statusCode).toBe("Canc");
     });
   });
 });

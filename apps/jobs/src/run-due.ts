@@ -3,9 +3,11 @@ import { ingestFixtures, ingestOdds } from "./ingestion.js";
 import { claimDueJobs, completeJob, ensureDailyJobs, failAndReleaseJob, requeueExpiredLeases } from "./schedule.js";
 import { NoTrainingDataError, assertTrainedAny, trainModel } from "./train.js";
 import { publishTickets } from "./publish.js";
-import { refreshPendingResults, settleResults } from "./settle.js";
+import { refreshPendingResults, refreshStaleFixtures, settleResults } from "./settle.js";
 
 const EXECUTION_TIMEOUT_MS = 4 * 60 * 1000;
+// Covers the last week of fixtures; older ones the provider never resolved are left to `jobs:settle-played`.
+const SETTLE_CATCH_UP_LOOKBACK_DAYS = 7;
 // Missing history won't fix itself within minutes; retry hourly so training resumes on its own after a backfill.
 const NO_TRAINING_DATA_RETRY_MS = 60 * 60 * 1000;
 const deadline = Date.now() + EXECUTION_TIMEOUT_MS;
@@ -38,7 +40,10 @@ async function execute(job: { jobType: string }): Promise<void> {
     case "SETTLE_RESULTS": {
       const settleNow = new Date();
       await refreshPendingResults(settleNow, client);
-      await settleResults(settleNow);
+      const settled = await settleResults(settleNow);
+      // Settle first so a quota stop in the wider catch-up can't hold up ticket settlement.
+      const caughtUp = await refreshStaleFixtures(settleNow, client, { lookbackDays: SETTLE_CATCH_UP_LOOKBACK_DAYS });
+      console.log(`SETTLE_RESULTS settled=${settled.settled} pending=${settled.pending} catchUpDates=${caughtUp.dates.length} refreshed=${caughtUp.refreshed} refreshedById=${caughtUp.refreshedById}`);
       return;
     }
     default: throw new Error(`Unsupported job type: ${job.jobType}`);
