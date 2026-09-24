@@ -33,6 +33,36 @@ export async function refreshPendingResults(now: Date, client: Pick<ApiFootballC
   return { refreshed };
 }
 
+// Kickoff + 90 min + half-time + stoppage/extra time/penalties comfortably fits in 3 hours.
+const MATCH_FINISH_BUFFER_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * Operator catch-up for every past fixture still marked SCHEDULED/LIVE, not only ticket legs:
+ * re-fetches one /fixtures?date= snapshot per affected UTC date (one request covers a whole day,
+ * far cheaper in quota than /fixtures?ids= batches of 20), so the matches view and calibration
+ * history reflect final scores too.
+ */
+export async function refreshStaleFixtures(now: Date, client: Pick<ApiFootballClient, "getPaged"> = new ApiFootballClient()): Promise<{ dates: string[]; refreshed: number; refreshedById: number }> {
+  const staleWhere = { status: { in: ["SCHEDULED" as const, "LIVE" as const] }, kickoff: { lt: new Date(now.getTime() - MATCH_FINISH_BUFFER_MS) } };
+  const stale = await db.fixture.findMany({ where: staleWhere, select: { kickoff: true } });
+  const dates = [...new Set(stale.map((fixture) => fixture.kickoff.toISOString().slice(0, 10)))].sort();
+  let refreshed = 0;
+  for (const date of dates) {
+    const records = await client.getPaged("/fixtures", { date });
+    refreshed += (await ingestFixtures(records)).ingested;
+  }
+
+  // A fixture moved to another date drops out of its original day's snapshot; fetch those by id.
+  const missed = await db.fixture.findMany({ where: { ...staleWhere, receivedAt: { lt: now } }, select: { providerId: true } });
+  let refreshedById = 0;
+  for (let i = 0; i < missed.length; i += REFRESH_BATCH_SIZE) {
+    const batch = missed.slice(i, i + REFRESH_BATCH_SIZE);
+    const records = await client.getPaged("/fixtures", { ids: batch.map((fixture) => fixture.providerId).join("-") });
+    refreshedById += (await ingestFixtures(records)).ingested;
+  }
+  return { dates, refreshed, refreshedById };
+}
+
 export async function settleResults(now: Date): Promise<{ settled: number; pending: number }> {
   const candidates = await db.ticketVersion.findMany({
     where: { lockAt: { lte: now }, settlements: { none: {} }, successors: { none: {} } },
