@@ -67,6 +67,10 @@ only signals intent — it doesn't guarantee the database is empty or exclusive 
 - `SETTLE_RESULTS` resolves locked, unsettled ticket versions once every leg's fixture is `FINISHED` (or
   voids the ticket if any leg's fixture was postponed/cancelled) and inserts exactly one `Settlement` row —
   matching the database triggers, which reject every other update to `TicketVersion`/`TicketLeg`.
+  After settling, it re-fetches (one `/fixtures?date=` request per day) every fixture from the last 7 days
+  still marked SCHEDULED/LIVE more than 3 hours after kickoff, so match results don't go stale. For older
+  gaps, run the unbounded catch-up on production:
+  `railway ssh -s web -- sh -c "cd /app && npm run jobs:settle-played --workspace=@highodds/jobs"`.
 - Market/selection normalization (`apps/jobs/src/markets.ts`) matches API-Football bet names by text
   (`"Match Winner"`, `"Goals Over/Under"` 2.5 line only, `"Both Teams Score"`) and has been **verified against
   live payloads**: a captured Premier League fixture (`apps/jobs/test/fixtures/odds-brighton-arsenal.json`,

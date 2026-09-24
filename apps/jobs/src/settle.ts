@@ -41,9 +41,18 @@ const MATCH_FINISH_BUFFER_MS = 3 * 60 * 60 * 1000;
  * re-fetches one /fixtures?date= snapshot per affected UTC date (one request covers a whole day,
  * far cheaper in quota than /fixtures?ids= batches of 20), so the matches view and calibration
  * history reflect final scores too.
+ *
+ * `lookbackDays` bounds how far back it looks: the daily SETTLE_RESULTS job passes a short window so
+ * fixtures the provider never resolves (left "NS"/"TBD" for months) don't cost a request every day.
  */
-export async function refreshStaleFixtures(now: Date, client: Pick<ApiFootballClient, "getPaged"> = new ApiFootballClient()): Promise<{ dates: string[]; refreshed: number; refreshedById: number }> {
-  const staleWhere = { status: { in: ["SCHEDULED" as const, "LIVE" as const] }, kickoff: { lt: new Date(now.getTime() - MATCH_FINISH_BUFFER_MS) } };
+export async function refreshStaleFixtures(
+  now: Date,
+  client: Pick<ApiFootballClient, "getPaged"> = new ApiFootballClient(),
+  options: { lookbackDays?: number } = {}
+): Promise<{ dates: string[]; refreshed: number; refreshedById: number }> {
+  const kickoff: { lt: Date; gte?: Date } = { lt: new Date(now.getTime() - MATCH_FINISH_BUFFER_MS) };
+  if (options.lookbackDays !== undefined) kickoff.gte = new Date(now.getTime() - options.lookbackDays * 24 * 60 * 60 * 1000);
+  const staleWhere = { status: { in: ["SCHEDULED" as const, "LIVE" as const] }, kickoff };
   const stale = await db.fixture.findMany({ where: staleWhere, select: { kickoff: true } });
   const dates = [...new Set(stale.map((fixture) => fixture.kickoff.toISOString().slice(0, 10)))].sort();
   let refreshed = 0;
