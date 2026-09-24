@@ -1,8 +1,8 @@
 import { db } from "@highodds/db";
-import { dixonColesDistribution, expectedGoals, leagueEligibility, type TeamStrengths, type CompletedMatch } from "@highodds/core";
+import { dixonColesDistribution, expectedGoals, HISTORY_LOOKBACK_DAYS, leagueEligibility, SELECTION_WINDOW_HOURS, type TeamStrengths, type CompletedMatch } from "@highodds/core";
 
-const SELECTION_WINDOW_MS = 20 * 60 * 60 * 1000;
-const HISTORY_LOOKBACK_MS = 365 * 24 * 60 * 60 * 1000;
+const SELECTION_WINDOW_MS = SELECTION_WINDOW_HOURS * 60 * 60 * 1000;
+const HISTORY_LOOKBACK_MS = HISTORY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
 
 const MARKET_SELECTIONS: Record<string, Array<{ selection: string; pick: (dist: ReturnType<typeof dixonColesDistribution>) => number }>> = {
   MATCH_WINNER: [

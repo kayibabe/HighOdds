@@ -6,3 +6,5 @@ export * from "./train.js";
 export * from "./metrics.js";
 export * from "./settlement.js";
 export * from "./dates.js";
+export * from "./pipeline.js";
+export * from "./analysis.js";

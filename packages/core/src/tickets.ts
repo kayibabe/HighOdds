@@ -17,14 +17,19 @@ export function legEligibility(leg: CandidateLeg, now: Date): EligibilityResult 
 function product(legs: CandidateLeg[]): number { return legs.reduce((value, leg) => value * leg.decimalOdds, 1); }
 function inTier(odds: number, tier: TicketTier): boolean { return odds >= tier.minOdds && (tier.maxOddsExclusive === null || odds < tier.maxOddsExclusive); }
 
+/** A ticket is an accumulator: it needs at least this many legs. */
+export const MIN_TICKET_LEGS = 2;
+/** No ticket carries more than this many legs from one competition. */
+export const MAX_LEGS_PER_LEAGUE = 2;
+
 function chooseLegs(candidates: CandidateLeg[], tier: TicketTier): CandidateLeg[] | null {
   const search = (start: number, selected: CandidateLeg[]): CandidateLeg[] | null => {
     const odds = product(selected);
-    if (selected.length >= 2 && inTier(odds, tier)) return selected;
+    if (selected.length >= MIN_TICKET_LEGS && inTier(odds, tier)) return selected;
     if (tier.maxOddsExclusive !== null && odds >= tier.maxOddsExclusive) return null;
     for (let index = start; index < candidates.length; index += 1) {
       const next = candidates[index]!;
-      if (selected.some((leg) => leg.fixtureId === next.fixtureId || leg.leagueId === next.leagueId && selected.filter((leg) => leg.leagueId === next.leagueId).length >= 2)) continue;
+      if (selected.some((leg) => leg.fixtureId === next.fixtureId || leg.leagueId === next.leagueId && selected.filter((leg) => leg.leagueId === next.leagueId).length >= MAX_LEGS_PER_LEAGUE)) continue;
       const result = search(index + 1, [...selected, next]);
       if (result) return result;
     }
@@ -33,7 +38,8 @@ function chooseLegs(candidates: CandidateLeg[], tier: TicketTier): CandidateLeg[
   return search(0, []);
 }
 
-const CONFIDENCE_THRESHOLDS = [70, 65, 60];
+/** Model/market agreement floors, strictest first; a tier relaxes down this list only when it must. */
+export const CONFIDENCE_THRESHOLDS = [70, 65, 60] as const;
 
 export interface BuildTicketsOptions {
   /** Fixtures already committed to tickets that stay live (e.g. locked tiers); no draft may reuse them. */
@@ -47,7 +53,7 @@ function draftAt(candidates: CandidateLeg[], bookmakerPriority: string[], tier: 
     const viable = candidates.filter((candidate) => candidate.bookmakerId === bookmakerId && candidate.confidenceScore >= threshold && !excluded.has(candidate.fixtureId) && legEligibility(candidate, now).eligible)
       .sort((a, b) => b.conservativeExpectedValue - a.conservativeExpectedValue);
     const legs = chooseLegs(viable, tier);
-    if (legs) return { tier, bookmakerId, legs, combinedOdds: product(legs), confidenceThreshold: threshold, relaxed: threshold < 70 };
+    if (legs) return { tier, bookmakerId, legs, combinedOdds: product(legs), confidenceThreshold: threshold, relaxed: threshold < CONFIDENCE_THRESHOLDS[0] };
   }
   return undefined;
 }

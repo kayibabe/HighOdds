@@ -9,7 +9,7 @@ import ThemeToggle from "./theme-toggle";
 // slim status header on top, bottom tab bar on phones. Sign-in renders standalone, as in lohela.
 
 type NavItem = { href: string; label: string; icon: IconName; hint: string };
-type IconName = "home" | "sparkles" | "chart" | "shield" | "login" | "search";
+type IconName = "home" | "sparkles" | "chart" | "shield" | "login" | "search" | "gauge";
 
 const WORKSPACE: NavItem[] = [
   { href: "/", label: "Overview", icon: "home", hint: "How HighOdds works" },
@@ -17,7 +17,10 @@ const WORKSPACE: NavItem[] = [
   { href: "/research", label: "Research", icon: "search", hint: "Fixture probabilities and price history" },
   { href: "/results", label: "Results", icon: "chart", hint: "Verified paper history" }
 ];
-const ADMIN: NavItem = { href: "/admin", label: "Admin", icon: "shield", hint: "System administration" };
+const ADMIN_ITEMS: NavItem[] = [
+  { href: "/analysis", label: "Analysis", icon: "gauge", hint: "Parameters, model quality and pipeline health" },
+  { href: "/admin", label: "Admin", icon: "shield", hint: "System administration" }
+];
 const SIGN_IN: NavItem = { href: "/signin", label: "Sign in", icon: "login", hint: "Subscriber and admin access" };
 
 function NavIcon({ name }: { name: IconName }) {
@@ -26,6 +29,7 @@ function NavIcon({ name }: { name: IconName }) {
     sparkles: <><path d="m12 3-1.2 4.1L7 8.3l3.8 1.2L12 13l1.2-3.5L17 8.3l-3.8-1.2L12 3Z" /><path d="m5 14-.7 2.3L2 17l2.3.7L5 20l.7-2.3L8 17l-2.3-.7L5 14Z" /></>,
     chart: <path d="M5 20V10M12 20V4M19 20v-7" />,
     search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /><path d="M7.5 10.5h6M10.5 7.5v6" /></>,
+    gauge: <><path d="M4 18a8 8 0 1 1 16 0" /><path d="m12 18 4-5" /><path d="M4 18h16" /></>,
     shield: <><path d="M12 3 20 6v5c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10V6l8-3Z" /><path d="m9 12 2 2 4-4" /></>,
     login: <><path d="M14 4h5v16h-5" /><path d="M10 16l4-4-4-4" /><path d="M14 12H4" /></>
   };
@@ -49,7 +53,7 @@ export default function AppShell({ email, isAdmin, children }: Readonly<{ email:
   }
 
   const workspace = WORKSPACE.filter((item) => item.href !== "/dashboard" || email);
-  const allItems = [...workspace, ...(isAdmin ? [ADMIN] : [])];
+  const allItems = [...workspace, ...(isAdmin ? ADMIN_ITEMS : [])];
   const current = allItems.find((item) => isActive(pathname, item.href));
   const mobileItems = email ? allItems : [...allItems, SIGN_IN];
 
@@ -77,7 +81,7 @@ export default function AppShell({ email, isAdmin, children }: Readonly<{ email:
           {workspace.map(navLink)}
           {isAdmin && <>
             <span className="sidebar-label sidebar-label-admin">System</span>
-            {navLink(ADMIN)}
+            {ADMIN_ITEMS.map(navLink)}
           </>}
         </nav>
         <div className="sidebar-account">

@@ -67,6 +67,10 @@ only signals intent — it doesn't guarantee the database is empty or exclusive 
 - `SETTLE_RESULTS` resolves locked, unsettled ticket versions once every leg's fixture is `FINISHED` (or
   voids the ticket if any leg's fixture was postponed/cancelled) and inserts exactly one `Settlement` row —
   matching the database triggers, which reject every other update to `TicketVersion`/`TicketLeg`.
+- The admin-only `/analysis` page reports every decision parameter (imported from `@highodds/core`, the same
+  constants the jobs run with — see `packages/core/src/pipeline.ts` and the exported thresholds in `odds.ts`,
+  `model.ts`, `train.ts`, `tickets.ts`), pipeline health, the next selection window's gate funnel, fitted model
+  parameters per competition, walk-forward calibration, and ticket/leg performance for a chosen period.
 - Market/selection normalization (`apps/jobs/src/markets.ts`) matches API-Football bet names by text
   (`"Match Winner"`, `"Goals Over/Under"` 2.5 line only, `"Both Teams Score"`) and has been **verified against
   live payloads**: a captured Premier League fixture (`apps/jobs/test/fixtures/odds-brighton-arsenal.json`,
