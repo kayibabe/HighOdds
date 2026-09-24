@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { LEG_OUTCOME_LABEL, selectionLabel } from "../../lib/selection";
 
 export type TicketLegData = {
   id: string;
@@ -70,16 +71,6 @@ function pct(probability: number): string {
   return `${(probability * 100).toFixed(1)}%`;
 }
 
-function selectionLabel(selection: string): string {
-  if (selection === "HOME") return "Home win";
-  if (selection === "AWAY") return "Away win";
-  if (selection === "DRAW") return "Draw";
-  if (selection === "YES") return "Yes";
-  if (selection === "NO") return "No";
-  const total = /^(OVER|UNDER)_([0-9]+)_([0-9]+)$/.exec(selection);
-  return total ? `${total[1] === "OVER" ? "Over" : "Under"} ${total[2]}.${total[3]}` : selection;
-}
-
 function matchState(leg: TicketLegData): string {
   if (leg.fixtureStatus === "SCHEDULED") return "Pending";
   if (leg.fixtureStatus === "FINISHED") return "Finished";
@@ -93,8 +84,6 @@ function matchState(leg: TicketLegData): string {
 function scoreline(leg: TicketLegData): string {
   return leg.homeGoals !== null && leg.awayGoals !== null ? `${leg.homeGoals}–${leg.awayGoals}` : "—";
 }
-
-const LEG_OUTCOME_LABEL: Record<string, string> = { WIN: "Won", LOSS: "Lost", VOID: "Void", PENDING: "Pending", UNRESOLVED: "Unresolved" };
 
 function LegOutcomeBadge({ leg }: { leg: TicketLegData }) {
   return <span className={`status-badge leg-outcome ${leg.outcome.toLowerCase()}`}>{LEG_OUTCOME_LABEL[leg.outcome] ?? leg.outcome}</span>;

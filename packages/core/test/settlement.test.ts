@@ -1,5 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { attributeTicket, evidenceLegOutcome, legOutcome, parseSettlementEvidence, type LegOutcome } from "../src/settlement.js";
+import { attributeTicket, evidenceLegOutcome, legOutcome, parseSettlementEvidence, strongestPrediction, type LegOutcome } from "../src/settlement.js";
+
+describe("strongestPrediction", () => {
+  const kickoff = new Date("2026-09-23T18:00:00Z");
+  const early = new Date("2026-09-23T06:00:00Z");
+  const later = new Date("2026-09-23T12:00:00Z");
+  const after = new Date("2026-09-23T19:00:00Z");
+  const row = (marketKey: string | null, selection: string, probability: number, asOfAt: Date) => ({ marketKey, selection, probability, asOfAt });
+
+  it("picks the highest-probability selection from the latest pre-kickoff batch", () => {
+    const pick = strongestPrediction([
+      row("MATCH_WINNER", "HOME", 0.9, early),
+      row("MATCH_WINNER", "HOME", 0.47, later), row("BTTS", "YES", 0.68, later), row("TOTAL_GOALS", "OVER_2_5", 0.66, later)
+    ], kickoff);
+    expect(pick).toMatchObject({ marketKey: "BTTS", selection: "YES", probability: 0.68 });
+  });
+
+  it("ignores post-kickoff batches and rows without a market", () => {
+    const pick = strongestPrediction([row("MATCH_WINNER", "AWAY", 0.6, early), row("BTTS", "NO", 0.99, after), row(null, "YES", 0.95, early)], kickoff);
+    expect(pick).toMatchObject({ selection: "AWAY" });
+  });
+
+  it("returns null when nothing usable exists", () => {
+    expect(strongestPrediction([], kickoff)).toBeNull();
+    expect(strongestPrediction([row("BTTS", "YES", 0.7, after)], kickoff)).toBeNull();
+  });
+});
 
 const finished = (homeGoals: number, awayGoals: number) => ({ status: "FINISHED", homeGoals, awayGoals });
 const legs = (...outcomes: LegOutcome[]) => outcomes.map((outcome, index) => ({ id: `leg${index}`, outcome }));

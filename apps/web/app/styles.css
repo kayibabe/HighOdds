@@ -345,7 +345,14 @@ h2 { font-size: 1.15rem; letter-spacing: -0.01em; margin: 32px 0 12px; }
 .matches-section { margin-top: 44px; }
 .matches-section > p { color: var(--text2); font-size: 13px; }
 .matches-table-wrap { overflow-x: auto; }
-.matches-table { min-width: 660px; }
+.matches-table { min-width: 940px; }
+.matches-table td.match-pick { white-space: nowrap; }
+.match-pick > span:first-child, .match-ticket-leg > span:first-child { margin-right: 6px; }
+.match-pick small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.match-pick .leg-outcome { min-width: 0; padding: 1px 7px; }
+.match-ticket-leg { display: block; }
+.match-ticket-leg + .match-ticket-leg { margin-top: 4px; }
+.match-pick-none { color: var(--muted); }
 .matches-table td:first-child, .matches-table td:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* Fixture research workspace */

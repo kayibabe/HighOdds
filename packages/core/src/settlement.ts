@@ -46,6 +46,27 @@ export function legOutcome(marketKey: string, selection: string, fixture: LegFix
   return resolveSelection(marketKey, selection, fixture.homeGoals, fixture.awayGoals) ?? "UNRESOLVED";
 }
 
+export interface StoredPrediction {
+  marketKey: string | null;
+  selection: string;
+  probability: number;
+  asOfAt: Date;
+}
+
+/**
+ * The model's most confident call for a fixture: from the latest prediction batch made before
+ * kickoff (later batches would be hindsight), the single highest-probability selection. Returns
+ * null when no pre-kickoff prediction with a known market exists.
+ */
+export function strongestPrediction(predictions: StoredPrediction[], kickoff: Date): StoredPrediction | null {
+  const usable = predictions.filter((row) => row.marketKey !== null && row.asOfAt.getTime() <= kickoff.getTime());
+  if (usable.length === 0) return null;
+  const latest = Math.max(...usable.map((row) => row.asOfAt.getTime()));
+  return usable
+    .filter((row) => row.asOfAt.getTime() === latest)
+    .reduce((best, row) => (row.probability > best.probability ? row : best));
+}
+
 export interface SettlementEvidenceLeg extends LegFixtureState {
   fixtureId: string;
   marketKey: string;
