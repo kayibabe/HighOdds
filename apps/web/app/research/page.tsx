@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@highodds/db";
-import { blantyreDayBounds, blantyreToday, evidenceLegOutcome, legOutcome, parseIsoDay, parseSettlementEvidence, resolveSelection } from "@highodds/core";
+import { blantyreDayBounds, blantyreToday, displayLegOutcome, parseIsoDay, parseSettlementEvidence, resolveSelection } from "@highodds/core";
 import { DayNav, formatDay } from "../date-nav";
 
 export const dynamic = "force-dynamic";
@@ -120,7 +120,7 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
               const settlement = leg.ticketVersion.settlements[0];
               const ticketOutcome = settlement?.outcome ?? "PENDING";
               const recorded = ticketOutcome !== "PENDING" ? parseSettlementEvidence(settlement?.evidence).find((row) => row.fixtureId === leg.fixtureId) : undefined;
-              const outcome = recorded ? evidenceLegOutcome(recorded) : legOutcome(leg.marketKey, leg.selection, selected);
+              const outcome = displayLegOutcome(recorded, leg.marketKey, leg.selection, selected).outcome;
               const target = leg.ticketVersion.targetDate.toISOString().slice(0, 10);
               return <tr key={leg.id}>
                 <td><Link href={`/results?from=${target}&to=${target}`}>{leg.ticketVersion.tier} · {target}</Link></td>

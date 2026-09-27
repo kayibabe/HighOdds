@@ -94,6 +94,17 @@ export function evidenceLegOutcome(leg: SettlementEvidenceLeg): LegOutcome {
   return leg.result ?? "UNRESOLVED";
 }
 
+/**
+ * A leg's outcome for display: the settlement evidence when it recorded one, otherwise live fixture
+ * state. A ticket settled LOST early records its unplayed legs as pending, so those keep following
+ * the live fixture instead of showing "pending" forever.
+ */
+export function displayLegOutcome(recorded: SettlementEvidenceLeg | undefined, marketKey: string, selection: string, fixture: LegFixtureState): { outcome: LegOutcome; fromSettlement: boolean } {
+  const settled = recorded ? evidenceLegOutcome(recorded) : "PENDING";
+  if (settled !== "PENDING") return { outcome: settled, fromSettlement: true };
+  return { outcome: legOutcome(marketKey, selection, fixture), fromSettlement: false };
+}
+
 export interface TicketAttribution {
   /** Legs that decided (or, before settlement, are deciding) the ticket outcome. */
   decisiveLegIds: string[];
@@ -104,9 +115,9 @@ export interface TicketAttribution {
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 /**
- * Explains a ticket outcome from its legs. Settlement rules: any void leg voids the whole ticket,
- * otherwise every leg must win. Before settlement this previews the same rules against live state,
- * so a ticket with a lost leg is reported as already beaten.
+ * Explains a ticket outcome from its legs. Settlement rules: a losing leg loses the ticket at once,
+ * even with legs still to play; otherwise any void leg voids the whole ticket, and a win needs every
+ * leg to win. (Tickets settled before losses took precedence may be VOID with a lost leg.)
  */
 export function attributeTicket(outcome: TicketOutcome, legs: Array<{ id: string; outcome: LegOutcome }>): TicketAttribution {
   const counts: Record<LegOutcome, number> = { WIN: 0, LOSS: 0, VOID: 0, PENDING: 0, UNRESOLVED: 0 };
@@ -123,13 +134,14 @@ export function attributeTicket(outcome: TicketOutcome, legs: Array<{ id: string
   if (outcome === "LOSS") {
     const failed = counts.LOSS + counts.UNRESOLVED;
     const detail = counts.UNRESOLVED > 0 ? ` (${counts.UNRESOLVED} could not be resolved from the score)` : "";
-    return { decisiveLegIds: ids("LOSS", "UNRESOLVED"), counts, summary: `Lost on ${failed} of ${plural(total, "leg")}${detail}; ${counts.WIN} won.` };
-  }
-  if (counts.VOID > 0) {
-    return { decisiveLegIds: ids("VOID"), counts, summary: `Heading for void: ${plural(counts.VOID, "leg")} postponed or cancelled. Awaiting settlement.` };
+    const unplayed = counts.PENDING > 0 ? `, ${counts.PENDING} not yet played` : "";
+    return { decisiveLegIds: ids("LOSS", "UNRESOLVED"), counts, summary: `Lost on ${failed} of ${plural(total, "leg")}${detail}; ${counts.WIN} won${unplayed}.` };
   }
   if (counts.LOSS > 0) {
     return { decisiveLegIds: ids("LOSS"), counts, summary: `Already beaten by ${plural(counts.LOSS, "losing leg")}; ${counts.WIN} won, ${counts.PENDING} still to play. Awaiting settlement.` };
+  }
+  if (counts.VOID > 0) {
+    return { decisiveLegIds: ids("VOID"), counts, summary: `Heading for void: ${plural(counts.VOID, "leg")} postponed or cancelled. Awaiting settlement.` };
   }
   if (counts.PENDING === 0 && counts.UNRESOLVED === 0 && total > 0) {
     return { decisiveLegIds: [], counts, summary: `All ${plural(total, "leg")} won. Awaiting settlement.` };

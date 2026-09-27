@@ -393,6 +393,52 @@ describe.skipIf(!databaseUrl)("publishTickets and settleResults (live DB)", () =
     });
   });
 
+  describe("settleResults settles an acca LOST as soon as one leg loses", () => {
+    type LegState = { status: "FINISHED" | "SCHEDULED" | "LIVE" | "POSTPONED"; homeGoals: number | null; awayGoals: number | null };
+    // Each leg backs HOME, so a finished 0-1 is a loss and 1-0 a win.
+    async function createAcca(legStates: LegState[]) {
+      const base = 810_000_000 + randomInt(1, 90_000) * 1000;
+      const competition = await db.competition.create({ data: { providerId: base + 1, name: "Synthetic Early Loss League", country: null } });
+      const homeTeam = await db.team.create({ data: { providerId: base + 2, name: "Synthetic Early Loss Home" } });
+      const awayTeam = await db.team.create({ data: { providerId: base + 3, name: "Synthetic Early Loss Away" } });
+      const lockAt = new Date("2026-04-01T12:00:00.000Z");
+      const version = await db.ticketVersion.create({
+        data: { targetDate: new Date("2026-04-01T00:00:00.000Z"), tier: "STANDARD", bookmakerId: `early-loss-${base}`, combinedOdds: 8, confidenceThreshold: 70, relaxed: false, lockAt, decision: [] }
+      });
+      for (const [index, state] of legStates.entries()) {
+        const fixture = await db.fixture.create({
+          data: { providerId: base + 10 + index, competitionId: competition.id, homeTeamId: homeTeam.id, awayTeamId: awayTeam.id, kickoff: new Date(lockAt.getTime() + index * 3 * 60 * 60 * 1000), ...state }
+        });
+        await db.ticketLeg.create({ data: { ticketVersionId: version.id, fixtureId: fixture.id, quoteId: `early-loss-quote-${base}-${index}`, marketKey: "MATCH_WINNER", selection: "HOME", decimalOdds: 2, probability: 0.5 } });
+      }
+      return { ticketVersionId: version.id, settleAt: new Date(lockAt.getTime() + 2 * 60 * 60 * 1000) };
+    }
+    const lost = { status: "FINISHED", homeGoals: 0, awayGoals: 1 } as const;
+    const won = { status: "FINISHED", homeGoals: 1, awayGoals: 0 } as const;
+    const unplayed = { status: "SCHEDULED", homeGoals: null, awayGoals: null } as const;
+
+    it("settles LOSS while other legs are still to play, recording them as unplayed", async () => {
+      const { ticketVersionId, settleAt } = await createAcca([lost, unplayed, { status: "LIVE", homeGoals: 0, awayGoals: 0 }]);
+      await settleResults(settleAt);
+      const settlement = await db.settlement.findUniqueOrThrow({ where: { ticketVersionId } });
+      expect(settlement.outcome).toBe("LOSS");
+      expect(Number(settlement.profitUnits)).toBe(-1);
+      expect((settlement.evidence as Array<{ status: string; result: string | null }>).map((leg) => [leg.status, leg.result])).toEqual([["FINISHED", "LOSS"], ["SCHEDULED", null], ["LIVE", null]]);
+    });
+
+    it("settles LOSS rather than VOID when a leg lost and another was postponed", async () => {
+      const { ticketVersionId, settleAt } = await createAcca([{ status: "POSTPONED", homeGoals: null, awayGoals: null }, lost]);
+      await settleResults(settleAt);
+      expect((await db.settlement.findUniqueOrThrow({ where: { ticketVersionId } })).outcome).toBe("LOSS");
+    });
+
+    it("keeps waiting when every finished leg won and others are still to play", async () => {
+      const { ticketVersionId, settleAt } = await createAcca([won, unplayed]);
+      await settleResults(settleAt);
+      expect(await db.settlement.findUnique({ where: { ticketVersionId } })).toBeNull();
+    });
+  });
+
   describe("refreshPendingResults", () => {
     it("re-fetches a fixture that finished after being ingested as SCHEDULED, unblocking settlement", async () => {
       const seed = randomInt(1, 90_000);

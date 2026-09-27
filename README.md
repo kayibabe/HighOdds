@@ -64,8 +64,10 @@ only signals intent — it doesn't guarantee the database is empty or exclusive 
   the prior one for that date/tier isn't locked yet). Tiers never share a fixture (in any market), including
   with that day's tickets that stay live, so one losing match can't sink several tickets. STANDARD is filled
   first; a tier is skipped rather than relaxing its confidence threshold just to find unused fixtures.
-- `SETTLE_RESULTS` resolves locked, unsettled ticket versions once every leg's fixture is `FINISHED` (or
-  voids the ticket if any leg's fixture was postponed/cancelled) and inserts exactly one `Settlement` row —
+- `SETTLE_RESULTS` resolves locked, unsettled ticket versions: as `LOSS` the moment any leg's fixture finishes
+  as a loss (even with legs still to play, and ahead of any void), otherwise once every leg's fixture is
+  `FINISHED` (or `VOID` if any leg's fixture was postponed/cancelled). Legs still unplayed when a ticket lost
+  early are recorded as such and keep showing their live result. It inserts exactly one `Settlement` row —
   matching the database triggers, which reject every other update to `TicketVersion`/`TicketLeg`.
 - Results are also picked up on every cron tick, not only by the daily job: `refreshFinishedFixtures`
   (`apps/jobs/src/settle.ts`) re-fetches, by `ids` in batches of 20, fixtures still `SCHEDULED`/`LIVE` at least

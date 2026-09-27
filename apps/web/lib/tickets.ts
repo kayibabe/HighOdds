@@ -1,5 +1,5 @@
 import { db } from "@highodds/db";
-import { attributeTicket, evidenceLegOutcome, legOutcome, parseSettlementEvidence, type TicketOutcome } from "@highodds/core";
+import { attributeTicket, displayLegOutcome, parseSettlementEvidence, type TicketOutcome } from "@highodds/core";
 import type { TicketCardData } from "../app/dashboard/ticket-board";
 
 export type DecisionLeg = {
@@ -59,7 +59,8 @@ export async function loadTicketCards(where: TicketWhere, take?: number): Promis
       const snapshot = decisions.find((item) => item.fixtureId === leg.fixtureId && item.market === leg.marketKey
         && item.selection === leg.selection && Math.abs(item.decimalOdds - odds) < 0.0001
         && Math.abs(item.modelProbability - probability) < 0.000001);
-      const recorded = settled ? evidence.get(leg.fixtureId) : undefined;
+      const shown = displayLegOutcome(settled ? evidence.get(leg.fixtureId) : undefined, leg.marketKey, leg.selection, leg.fixture);
+      const recorded = shown.fromSettlement ? evidence.get(leg.fixtureId) : undefined;
       return {
         id: leg.id, home: leg.fixture.homeTeam.name, away: leg.fixture.awayTeam.name,
         competition: leg.fixture.competition.name, kickoff: leg.fixture.kickoff.toISOString(),
@@ -68,7 +69,7 @@ export async function loadTicketCards(where: TicketWhere, take?: number): Promis
         odds, probability, quoteCapturedAt: quoteTimeById.get(leg.quoteId)?.toISOString() ?? null,
         consensusProbability: snapshot?.consensusProbability ?? null,
         agreementScore: snapshot?.confidenceScore ?? null,
-        outcome: recorded ? evidenceLegOutcome(recorded) : legOutcome(leg.marketKey, leg.selection, leg.fixture),
+        outcome: shown.outcome,
         outcomeSource: recorded ? "settlement" as const : "live" as const,
         settledScore: recorded && recorded.homeGoals !== null && recorded.awayGoals !== null ? `${recorded.homeGoals}–${recorded.awayGoals}` : null,
         decisive: false
