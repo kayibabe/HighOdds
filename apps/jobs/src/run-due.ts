@@ -36,9 +36,12 @@ async function execute(job: { jobType: string }): Promise<void> {
       return;
     }
     case "SETTLE_RESULTS": {
+      // Settlement only reads the database, so a failed refresh (e.g. the shared key's daily limit)
+      // must not hold back tickets the stored results already decide; the job still retries.
       const settleNow = new Date();
-      await refreshPendingResults(settleNow, client);
+      const refreshError = await refreshPendingResults(settleNow, client).then(() => null, (error: unknown) => error);
       await settleResults(settleNow);
+      if (refreshError) throw refreshError;
       return;
     }
     default: throw new Error(`Unsupported job type: ${job.jobType}`);
@@ -69,13 +72,19 @@ async function main(): Promise<void> {
 /** Every tick, not a daily job: picks up full-time results within minutes and settles what they complete. */
 async function settleFinishedMatches(): Promise<void> {
   if (Date.now() >= deadline - 30_000) return;
+  const now = new Date();
+  let refresh = { requested: 0, refreshed: 0 };
   try {
-    const now = new Date();
-    const refresh = await refreshFinishedFixtures(now);
+    refresh = await refreshFinishedFixtures(now);
+  } catch (error) {
+    // Keep going: settlement only needs the database, and results already stored may decide tickets.
+    console.error("LIVE_SETTLE refresh failed:", error instanceof Error ? error.message : error);
+  }
+  try {
     const settle = await settleResults(now);
     if (refresh.requested > 0 || settle.settled > 0) console.log(`LIVE_SETTLE requested=${refresh.requested} refreshed=${refresh.refreshed} settled=${settle.settled} pending=${settle.pending}`);
   } catch (error) {
-    console.error("LIVE_SETTLE failed:", error instanceof Error ? error.message : error);
+    console.error("LIVE_SETTLE settle failed:", error instanceof Error ? error.message : error);
   }
 }
 
