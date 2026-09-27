@@ -63,6 +63,52 @@ export async function refreshStaleFixtures(now: Date, client: Pick<ApiFootballCl
   return { dates, refreshed, refreshedById };
 }
 
+// 45 + 15 half-time + 45 minutes: no match can reach full time sooner, so polling earlier only burns quota.
+const EARLIEST_FINISH_MS = 105 * 60 * 1000;
+// Recently kicked-off matches are re-checked every cron tick (5 min); the margin absorbs tick jitter.
+const RECENT_WINDOW_MS = 3 * 60 * 60 * 1000;
+const RECENT_RECHECK_MS = 4 * 60 * 1000;
+// A pending ticket leg past that window (delayed, suspended mid-game) keeps a tighter cadence than
+// the rest; untracked stragglers back off to hourly and drop out after LOOKBACK_MS (the daily
+// SETTLE_RESULTS job and the settle-played CLI remain the catch-up for anything older).
+const TICKET_LEG_RECHECK_MS = 15 * 60 * 1000;
+const STRAGGLER_RECHECK_MS = 60 * 60 * 1000;
+const LOOKBACK_MS = 48 * 60 * 60 * 1000;
+const MAX_BATCHES_PER_TICK = 15;
+
+/**
+ * Runs on every cron tick so a match is recorded as FINISHED (and any ticket it completes is
+ * settled) within minutes of full time instead of waiting for the daily SETTLE_RESULTS job. Only
+ * fixtures that could plausibly have finished are requested, ticket legs first, capped per tick.
+ */
+export async function refreshFinishedFixtures(now: Date, client: Pick<ApiFootballClient, "getPaged"> = new ApiFootballClient()): Promise<{ requested: number; refreshed: number }> {
+  const at = (msAgo: number) => new Date(now.getTime() - msAgo);
+  const open = { status: { in: ["SCHEDULED" as const, "LIVE" as const] }, kickoff: { lte: at(EARLIEST_FINISH_MS) } };
+  const recent = { kickoff: { gte: at(RECENT_WINDOW_MS) }, receivedAt: { lt: at(RECENT_RECHECK_MS) } };
+  const limit = MAX_BATCHES_PER_TICK * REFRESH_BATCH_SIZE;
+
+  const ticketLegs = await db.fixture.findMany({
+    where: {
+      ...open,
+      ticketLegs: { some: { ticketVersion: { lockAt: { lte: now }, settlements: { none: {} }, successors: { none: {} } } } },
+      OR: [recent, { receivedAt: { lt: at(TICKET_LEG_RECHECK_MS) } }]
+    },
+    orderBy: { kickoff: "asc" }, take: limit, select: { providerId: true }
+  });
+  const others = await db.fixture.findMany({
+    where: { ...open, OR: [recent, { kickoff: { gte: at(LOOKBACK_MS) }, receivedAt: { lt: at(STRAGGLER_RECHECK_MS) } }] },
+    orderBy: { kickoff: "desc" }, take: limit, select: { providerId: true }
+  });
+  const providerIds = [...new Set([...ticketLegs, ...others].map((fixture) => fixture.providerId))].slice(0, limit);
+
+  let refreshed = 0;
+  for (let i = 0; i < providerIds.length; i += REFRESH_BATCH_SIZE) {
+    const records = await client.getPaged("/fixtures", { ids: providerIds.slice(i, i + REFRESH_BATCH_SIZE).join("-") });
+    refreshed += (await ingestFixtures(records)).ingested;
+  }
+  return { requested: providerIds.length, refreshed };
+}
+
 export async function settleResults(now: Date): Promise<{ settled: number; pending: number }> {
   const candidates = await db.ticketVersion.findMany({
     where: { lockAt: { lte: now }, settlements: { none: {} }, successors: { none: {} } },

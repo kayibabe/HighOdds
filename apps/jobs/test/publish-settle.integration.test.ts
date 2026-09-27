@@ -4,7 +4,7 @@ import { db } from "@highodds/db";
 import { dixonColesDistribution, expectedGoals, type TeamStrengths } from "@highodds/core";
 import { generatePredictions } from "../src/predict.js";
 import { publishTickets } from "../src/publish.js";
-import { refreshPendingResults, settleResults } from "../src/settle.js";
+import { refreshFinishedFixtures, refreshPendingResults, settleResults } from "../src/settle.js";
 
 /**
  * Exercises publishTickets/settleResults end to end against a real local Postgres, the same way
@@ -460,6 +460,92 @@ describe.skipIf(!databaseUrl)("publishTickets and settleResults (live DB)", () =
       await refreshPendingResults(new Date(kickoff.getTime() + 60 * 60 * 1000), fakeClient);
 
       expect(requestedIds).not.toContain(fixture.providerId);
+    });
+  });
+
+  describe("refreshFinishedFixtures", () => {
+    const MINUTE = 60 * 1000;
+    const seed = randomInt(1, 90_000);
+    const base = 790_000_000 + seed * 1000;
+    // Unique per run: the fixtures created here are left behind (see file header), so a fixed "now"
+    // would let a previous run's rows fall inside this run's polling windows.
+    const now = new Date(Date.UTC(2027, 0, 1, 20, 0, 0) + seed * 24 * 60 * MINUTE);
+    let competition: { id: string; providerId: number };
+    let homeTeam: { id: string; providerId: number };
+    let awayTeam: { id: string; providerId: number };
+    let nextProviderId = base + 10;
+
+    beforeAll(async () => {
+      competition = await db.competition.create({ data: { providerId: base + 1, name: "Synthetic Live League", country: null } });
+      homeTeam = await db.team.create({ data: { providerId: base + 2, name: "Synthetic Live Home" } });
+      awayTeam = await db.team.create({ data: { providerId: base + 3, name: "Synthetic Live Away" } });
+    });
+
+    async function createFixture(kickoffMinutesAgo: number, receivedMinutesAgo: number) {
+      return db.fixture.create({
+        data: {
+          providerId: nextProviderId++, competitionId: competition.id, homeTeamId: homeTeam.id, awayTeamId: awayTeam.id,
+          kickoff: new Date(now.getTime() - kickoffMinutesAgo * MINUTE), receivedAt: new Date(now.getTime() - receivedMinutesAgo * MINUTE), status: "SCHEDULED"
+        }
+      });
+    }
+
+    function recordingClient(finished: Map<number, Date>) {
+      const requestedIds: number[] = [];
+      const client = {
+        getPaged: async (_endpoint: string, query: Record<string, string | number | undefined>) => {
+          const ids = String(query.ids).split("-").map(Number);
+          requestedIds.push(...ids);
+          return ids.filter((id) => finished.has(id)).map((id) => ({
+            fixture: { id, date: finished.get(id)!.toISOString(), status: { short: "FT" } },
+            league: { id: competition.providerId, name: "Synthetic Live League", country: null },
+            teams: { home: { id: homeTeam.providerId, name: "Synthetic Live Home" }, away: { id: awayTeam.providerId, name: "Synthetic Live Away" } },
+            goals: { home: 1, away: 0 }
+          }));
+        }
+      };
+      return { client, requestedIds };
+    }
+
+    it("records full time within a tick and settles the ticket it completes", async () => {
+      const fixture = await createFixture(110, 120);
+      const version = await db.ticketVersion.create({
+        data: { targetDate: new Date(now.toISOString().slice(0, 10)), tier: "STANDARD", bookmakerId: `live-${base}`, combinedOdds: 3, confidenceThreshold: 70, relaxed: false, lockAt: fixture.kickoff, decision: [] }
+      });
+      await db.ticketLeg.create({ data: { ticketVersionId: version.id, fixtureId: fixture.id, quoteId: `live-quote-${base}`, marketKey: "MATCH_WINNER", selection: "HOME", decimalOdds: 3, probability: 0.5 } });
+
+      const { client, requestedIds } = recordingClient(new Map([[fixture.providerId, fixture.kickoff]]));
+      await refreshFinishedFixtures(now, client);
+      expect(requestedIds).toContain(fixture.providerId);
+      expect((await db.fixture.findUniqueOrThrow({ where: { id: fixture.id } })).status).toBe("FINISHED");
+
+      await settleResults(now);
+      const settlement = await db.settlement.findUniqueOrThrow({ where: { ticketVersionId: version.id } });
+      expect(settlement.outcome).toBe("WIN");
+      expect(Number(settlement.profitUnits)).toBeCloseTo(2, 6);
+    });
+
+    it("polls only fixtures that could have finished and were not just checked", async () => {
+      const tooEarly = await createFixture(60, 120);          // kicked off an hour ago: cannot be over yet
+      const justChecked = await createFixture(115, 2);        // checked two minutes ago by the previous tick
+      const dueRecent = await createFixture(115, 6);          // recent match, last check a tick ago
+      const quietStraggler = await createFixture(10 * 60, 30); // old untracked fixture, checked within the hour
+      const dueStraggler = await createFixture(10 * 60, 90);  // old untracked fixture, due its hourly check
+      const outsideLookback = await createFixture(72 * 60, 600);
+
+      const { client, requestedIds } = recordingClient(new Map());
+      await refreshFinishedFixtures(now, client);
+
+      expect(requestedIds).toEqual(expect.arrayContaining([dueRecent.providerId, dueStraggler.providerId]));
+      for (const skipped of [tooEarly, justChecked, quietStraggler, outsideLookback]) expect(requestedIds).not.toContain(skipped.providerId);
+    });
+
+    it("sends at most 20 fixture ids per request", async () => {
+      for (let i = 0; i < 25; i += 1) await createFixture(130, 30);
+      const batchSizes: number[] = [];
+      await refreshFinishedFixtures(now, { getPaged: async (_endpoint, query) => { batchSizes.push(String(query.ids).split("-").length); return []; } });
+      expect(batchSizes.length).toBeGreaterThanOrEqual(2);
+      for (const size of batchSizes) expect(size).toBeLessThanOrEqual(20);
     });
   });
 });
