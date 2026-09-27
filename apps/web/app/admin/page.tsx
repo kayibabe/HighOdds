@@ -60,7 +60,7 @@ export default async function AdminPage() {
       </table>
 
       <h2>Jobs &amp; quota</h2>
-      <p>Today&apos;s API-Football usage: {quota ? `${quota.requestCount} / ${quota.quotaLimit} (safety ${quota.safetyPercent}%)${quota.degradedAt ? " — DEGRADED" : ""}` : "No requests yet today"}</p>
+      <p>Today&apos;s API-Football usage: {quota ? `${quota.requestCount} requests (plan quota ${quota.quotaLimit}/day, shared key)` : "No requests yet today"}</p>
       <table>
         <thead><tr><th>Type</th><th>Status</th><th>Attempts</th><th>Run after</th><th>Last error</th><th></th></tr></thead>
         <tbody>

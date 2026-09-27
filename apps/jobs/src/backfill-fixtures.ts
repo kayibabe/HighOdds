@@ -16,7 +16,7 @@ async function wasAlreadyFetched(date: string): Promise<boolean> {
  * fresh database -- this fills that history in one pass.
  *
  * Skips any date that already has a captured /fixtures payload, so re-running the same range
- * after a QuotaSafetyError (or just to fill in the rest of a huge range across several days)
+ * after the provider cuts it off (or just to fill in the rest of a huge range across several days)
  * doesn't re-spend quota on dates that already succeeded -- only actually genuinely resumes.
  */
 export async function backfillFixtures(

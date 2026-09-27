@@ -152,7 +152,7 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
 
       <section id="parameters" className="analysis-section" aria-labelledby="parameters-title">
         <h2 id="parameters-title">Decision parameters</h2>
-        <p className="meta">Configured rules. Changing one means changing code in <code>@highodds/core</code>; this page updates with it. The API quota limit and safety margin are set per environment and shown under pipeline health.</p>
+        <p className="meta">Configured rules. Changing one means changing code in <code>@highodds/core</code>; this page updates with it. The API plan quota is set per environment and shown under pipeline health; HighOdds does not cap its own usage.</p>
         {PARAMETER_GROUPS.map((group) => <div key={group.title} className="matches-table-wrap">
           <table className="analysis-table param-table">
             <caption>{group.title}</caption>
@@ -208,18 +208,15 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
         <div className="matches-table-wrap">
           <table className="analysis-table">
             <caption>API-Football quota · last 7 days used</caption>
-            <thead><tr><th scope="col">Day (UTC)</th><th scope="col">Requests</th><th scope="col">Quota</th><th scope="col">Safety limit</th><th scope="col">Used of limit</th><th scope="col">Degraded</th></tr></thead>
-            <tbody>{pipeline.quota.length === 0 ? <tr><td colSpan={6}>No API usage recorded.</td></tr> : pipeline.quota.map((row) => {
-              const limit = Math.floor(row.quotaLimit * row.safetyPercent / 100);
-              return <tr key={row.id} className={row.degradedAt ? "attention" : undefined}>
+            <thead><tr><th scope="col">Day (UTC)</th><th scope="col">HighOdds requests</th><th scope="col">Plan quota (shared key)</th><th scope="col">HighOdds share</th></tr></thead>
+            <tbody>{pipeline.quota.length === 0 ? <tr><td colSpan={4}>No API usage recorded.</td></tr> : pipeline.quota.map((row) => (
+              <tr key={row.id}>
                 <th scope="row">{row.usageDate.toISOString().slice(0, 10)}</th>
                 <td className="num">{count(row.requestCount)}</td>
                 <td className="num">{count(row.quotaLimit)}</td>
-                <td className="num">{count(limit)} ({row.safetyPercent}%)</td>
-                <td className="num">{pct(limit > 0 ? row.requestCount / limit : null, 0)}</td>
-                <td>{row.degradedAt ? `Yes, ${when(row.degradedAt)}` : "No"}</td>
-              </tr>;
-            })}</tbody>
+                <td className="num">{pct(row.quotaLimit > 0 ? row.requestCount / row.quotaLimit : null, 0)}</td>
+              </tr>
+            ))}</tbody>
           </table>
         </div>
       </section>
