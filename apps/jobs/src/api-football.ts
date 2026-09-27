@@ -2,32 +2,27 @@ import { db } from "@highodds/db";
 
 const BASE_URL = "https://v3.football.api-sports.io";
 
-export class QuotaSafetyError extends Error {}
-
 function utcDateOnly(date: Date): Date { return new Date(`${date.toISOString().slice(0, 10)}T00:00:00.000Z`); }
 
 export class ApiFootballClient {
-  constructor(private readonly apiKey = process.env.API_FOOTBALL_KEY, private readonly quota = Number(process.env.API_FOOTBALL_DAILY_QUOTA ?? 7500), private readonly safetyPercent = Number(process.env.API_FOOTBALL_QUOTA_SAFETY_PERCENT ?? 90)) {}
+  constructor(private readonly apiKey = process.env.API_FOOTBALL_KEY, private readonly quota = Number(process.env.API_FOOTBALL_DAILY_QUOTA ?? 7500)) {}
 
-  private async consumeQuota(): Promise<void> {
+  // Counts HighOdds' own requests for the admin/analysis pages only; it never blocks a request. The
+  // key is shared with other systems, so the provider's own daily limit is the only real ceiling.
+  private async recordUsage(): Promise<void> {
     const usageDate = utcDateOnly(new Date());
-    const limit = Math.floor(this.quota * this.safetyPercent / 100);
-    const result = await db.apiQuotaUsage.upsert({
+    await db.apiQuotaUsage.upsert({
       where: { usageDate },
-      create: { usageDate, quotaLimit: this.quota, safetyPercent: this.safetyPercent, requestCount: 1 },
+      create: { usageDate, quotaLimit: this.quota, requestCount: 1 },
       update: { requestCount: { increment: 1 } }
     });
-    if (result.requestCount > limit) {
-      await db.apiQuotaUsage.update({ where: { usageDate }, data: { degradedAt: new Date() } });
-      throw new QuotaSafetyError(`API-Football quota safety margin (${limit}) reached`);
-    }
   }
 
   async getPaged(endpoint: string, query: Record<string, string | number | undefined>): Promise<unknown[]> {
     if (!this.apiKey) throw new Error("API_FOOTBALL_KEY is not configured");
     const response: unknown[] = [];
     for (let page = 1; ; page += 1) {
-      await this.consumeQuota();
+      await this.recordUsage();
       const params = new URLSearchParams(page > 1 ? { page: String(page) } : {});
       Object.entries(query).forEach(([key, value]) => { if (value !== undefined) params.set(key, String(value)); });
       const url = `${BASE_URL}${endpoint}?${params}`;
