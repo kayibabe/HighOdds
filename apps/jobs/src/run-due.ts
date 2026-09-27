@@ -3,7 +3,7 @@ import { ingestFixtures, ingestOdds } from "./ingestion.js";
 import { claimDueJobs, completeJob, ensureDailyJobs, failAndReleaseJob, requeueExpiredLeases } from "./schedule.js";
 import { NoTrainingDataError, assertTrainedAny, trainModel } from "./train.js";
 import { publishTickets } from "./publish.js";
-import { refreshPendingResults, settleResults } from "./settle.js";
+import { refreshFinishedFixtures, refreshPendingResults, settleResults } from "./settle.js";
 
 const EXECUTION_TIMEOUT_MS = 4 * 60 * 1000;
 // Missing history won't fix itself within minutes; retry hourly so training resumes on its own after a backfill.
@@ -62,6 +62,20 @@ async function main(): Promise<void> {
       console.error(`${job.jobType} failed:`, error instanceof Error ? error.message : error);
       await failAndReleaseJob(job.id, error, error instanceof NoTrainingDataError ? NO_TRAINING_DATA_RETRY_MS : undefined);
     }
+  }
+  await settleFinishedMatches();
+}
+
+/** Every tick, not a daily job: picks up full-time results within minutes and settles what they complete. */
+async function settleFinishedMatches(): Promise<void> {
+  if (Date.now() >= deadline - 30_000) return;
+  try {
+    const now = new Date();
+    const refresh = await refreshFinishedFixtures(now);
+    const settle = await settleResults(now);
+    if (refresh.requested > 0 || settle.settled > 0) console.log(`LIVE_SETTLE requested=${refresh.requested} refreshed=${refresh.refreshed} settled=${settle.settled} pending=${settle.pending}`);
+  } catch (error) {
+    console.error("LIVE_SETTLE failed:", error instanceof Error ? error.message : error);
   }
 }
 

@@ -67,6 +67,11 @@ only signals intent — it doesn't guarantee the database is empty or exclusive 
 - `SETTLE_RESULTS` resolves locked, unsettled ticket versions once every leg's fixture is `FINISHED` (or
   voids the ticket if any leg's fixture was postponed/cancelled) and inserts exactly one `Settlement` row —
   matching the database triggers, which reject every other update to `TicketVersion`/`TicketLeg`.
+- Results are also picked up on every cron tick, not only by the daily job: `refreshFinishedFixtures`
+  (`apps/jobs/src/settle.ts`) re-fetches, by `ids` in batches of 20, fixtures still `SCHEDULED`/`LIVE` at least
+  105 minutes after kickoff — every tick for the first 3 hours, then every 15 minutes for pending ticket legs
+  and hourly for other fixtures up to 48 hours back — and settles whatever those results complete. A match
+  is therefore qualified, and its ticket settled, within about five minutes of full time.
 - The admin-only `/analysis` page reports every decision parameter (imported from `@highodds/core`, the same
   constants the jobs run with — see `packages/core/src/pipeline.ts` and the exported thresholds in `odds.ts`,
   `model.ts`, `train.ts`, `tickets.ts`), pipeline health, the next selection window's gate funnel, fitted model
