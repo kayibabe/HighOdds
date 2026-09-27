@@ -1,6 +1,6 @@
 import { db } from "@highodds/db";
 import {
-  blantyreDayBounds, calibrationBuckets, calibrationByMarket, calibrationBySelection, evidenceLegOutcome, legOutcome, median,
+  blantyreDayBounds, calibrationBuckets, calibrationByMarket, calibrationBySelection, displayLegOutcome, median,
   parseSettlementEvidence, QUOTE_MAX_AGE_MINUTES, resolveSelection, SELECTION_WINDOW_HOURS, summarizeLegs, summarizeTiers, utcDate,
   type DayRange, type LegSummaryInput, type ScoredPrediction, type TicketOutcome
 } from "@highodds/core";
@@ -218,7 +218,7 @@ export async function loadTicketPerformance(range: DayRange) {
       const snapshot = decisions.find((item) => item.fixtureId === leg.fixtureId && item.market === leg.marketKey && item.selection === leg.selection);
       legs.push({
         marketKey: leg.marketKey, decimalOdds: Number(leg.decimalOdds), probability: Number(leg.probability),
-        outcome: recorded ? evidenceLegOutcome(recorded) : legOutcome(leg.marketKey, leg.selection, leg.fixture),
+        outcome: displayLegOutcome(recorded, leg.marketKey, leg.selection, leg.fixture).outcome,
         confidenceScore: snapshot?.confidenceScore ?? null
       });
     }

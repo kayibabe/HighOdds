@@ -115,19 +115,23 @@ export async function settleResults(now: Date): Promise<{ settled: number; pendi
 
   let settled = 0; let pending = 0;
   for (const ticket of candidates) {
-    const unresolved = ticket.legs.some((leg) => leg.fixture.status === "SCHEDULED" || leg.fixture.status === "LIVE");
-    if (unresolved) { pending += 1; continue; }
-
-    const voided = ticket.legs.some((leg) => leg.fixture.status === "POSTPONED" || leg.fixture.status === "CANCELLED");
     const evidence = ticket.legs.map((leg) => ({
       fixtureId: leg.fixtureId, marketKey: leg.marketKey, selection: leg.selection,
       status: leg.fixture.status, homeGoals: leg.fixture.homeGoals, awayGoals: leg.fixture.awayGoals,
       result: leg.fixture.status === "FINISHED" ? resolveSelection(leg.marketKey, leg.selection, leg.fixture.homeGoals!, leg.fixture.awayGoals!) : null
     }));
+    // One losing leg beats the whole acca, so it settles LOSS at once without waiting for (or being
+    // voided by) the legs still to play.
+    const lost = evidence.some((leg) => leg.result === "LOSS");
+    const unresolved = ticket.legs.some((leg) => leg.fixture.status === "SCHEDULED" || leg.fixture.status === "LIVE");
+    if (unresolved && !lost) { pending += 1; continue; }
 
+    const voided = ticket.legs.some((leg) => leg.fixture.status === "POSTPONED" || leg.fixture.status === "CANCELLED");
     let outcome: "WIN" | "LOSS" | "VOID";
     let profitUnits: number;
-    if (voided) {
+    if (lost) {
+      outcome = "LOSS"; profitUnits = -1;
+    } else if (voided) {
       outcome = "VOID"; profitUnits = 0;
     } else {
       const allWin = evidence.every((leg) => leg.result === "WIN");

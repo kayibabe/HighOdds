@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attributeTicket, evidenceLegOutcome, legOutcome, parseSettlementEvidence, strongestPrediction, type LegOutcome } from "../src/settlement.js";
+import { attributeTicket, displayLegOutcome, evidenceLegOutcome, legOutcome, parseSettlementEvidence, strongestPrediction, type LegOutcome } from "../src/settlement.js";
 
 describe("strongestPrediction", () => {
   const kickoff = new Date("2026-09-23T18:00:00Z");
@@ -63,6 +63,24 @@ describe("settlement evidence", () => {
   });
 });
 
+describe("displayLegOutcome", () => {
+  const recorded = (status: string, result: "WIN" | "LOSS" | null, homeGoals: number | null = null, awayGoals: number | null = null) =>
+    ({ fixtureId: "f1", marketKey: "MATCH_WINNER", selection: "HOME", status, homeGoals, awayGoals, result });
+
+  it("uses the settlement record when it resolved the leg, even if the fixture changed since", () => {
+    expect(displayLegOutcome(recorded("FINISHED", "LOSS", 0, 1), "MATCH_WINNER", "HOME", finished(2, 0))).toEqual({ outcome: "LOSS", fromSettlement: true });
+  });
+
+  it("follows the live fixture for a leg that was unplayed when the ticket settled early", () => {
+    expect(displayLegOutcome(recorded("SCHEDULED", null), "MATCH_WINNER", "HOME", finished(2, 0))).toEqual({ outcome: "WIN", fromSettlement: false });
+    expect(displayLegOutcome(recorded("LIVE", null, 0, 0), "MATCH_WINNER", "HOME", { status: "LIVE", homeGoals: 1, awayGoals: 0 })).toEqual({ outcome: "PENDING", fromSettlement: false });
+  });
+
+  it("uses live state when there is no settlement record", () => {
+    expect(displayLegOutcome(undefined, "MATCH_WINNER", "HOME", finished(0, 2))).toEqual({ outcome: "LOSS", fromSettlement: false });
+  });
+});
+
 describe("attributeTicket", () => {
   it("credits every leg on a win", () => {
     const result = attributeTicket("WIN", legs("WIN", "WIN", "WIN"));
@@ -86,6 +104,18 @@ describe("attributeTicket", () => {
     const result = attributeTicket("VOID", legs("LOSS", "VOID", "WIN"));
     expect(result.decisiveLegIds).toEqual(["leg1"]);
     expect(result.summary).toMatch(/^Voided by 1 postponed or cancelled leg;/);
+  });
+
+  it("says how many legs were still unplayed when a ticket lost early", () => {
+    const result = attributeTicket("LOSS", legs("WIN", "LOSS", "PENDING"));
+    expect(result.decisiveLegIds).toEqual(["leg1"]);
+    expect(result.summary).toBe("Lost on 1 of 3 legs; 1 won, 1 not yet played.");
+  });
+
+  it("previews a lost leg as beating the ticket even when another leg is void", () => {
+    const result = attributeTicket("PENDING", legs("LOSS", "VOID", "PENDING"));
+    expect(result.decisiveLegIds).toEqual(["leg0"]);
+    expect(result.summary).toMatch(/^Already beaten by 1 losing leg/);
   });
 
   it("previews an unsettled ticket that is already beaten", () => {
