@@ -1,8 +1,8 @@
 import { db } from "@highodds/db";
 import {
-  blantyreDayBounds, calibrationBuckets, calibrationByMarket, calibrationBySelection, displayLegOutcome, median, modelPicks,
+  blantyreDayBounds, calibrationBuckets, calibrationByMarket, calibrationBySelection, displayLegOutcome, filterPicks, median, modelPicks,
   parseSettlementEvidence, QUOTE_MAX_AGE_MINUTES, resolveSelection, SELECTION_WINDOW_HOURS, summarizeLegs, summarizePicks, summarizeTiers, utcDate,
-  type DayRange, type LegSummaryInput, type ScoredPrediction, type TicketOutcome
+  type DayRange, type LegSummaryInput, type PickFilter, type ScoredPrediction, type TicketOutcome
 } from "@highodds/core";
 import { averageClv } from "./clv";
 import { decisionLegs } from "./tickets";
@@ -207,8 +207,8 @@ type ClosingPriceRow = { fixtureId: string; marketKey: string; selection: string
  * market) among the walk-forward forecasts scored by loadCalibration. Each pick is priced at the last
  * pre-kickoff quote from the highest-priority active bookmaker that quoted it, the book a ticket would try first.
  */
-export async function loadModelPicks(range: DayRange, scored: ScoredPrediction[]) {
-  if (scored.length === 0) return { picks: 0, ...summarizePicks([]) };
+export async function loadModelPicks(range: DayRange, scored: ScoredPrediction[], filter: PickFilter) {
+  if (scored.length === 0) return { total: 0, overall: null, groups: [], picks: 0, ...summarizePicks([]) };
   const { start, end } = kickoffBounds(range);
   const prices = await db.$queryRaw<ClosingPriceRow[]>`
     SELECT DISTINCT ON (q."fixtureId", q."marketId", q."selection")
@@ -221,8 +221,15 @@ export async function loadModelPicks(range: DayRange, scored: ScoredPrediction[]
       AND q."capturedAt" < f."kickoff" AND b."active" = true AND m."normalizedKey" IS NOT NULL
     ORDER BY q."fixtureId", q."marketId", q."selection", b."priority", b."id", q."capturedAt" DESC`;
   const priceByKey = new Map(prices.map((row) => [`${row.fixtureId}:${row.marketKey}:${row.selection}`, row.odds]));
-  const picks = modelPicks(scored, (row) => priceByKey.get(`${row.fixtureId}:${row.marketKey}:${row.selection}`) ?? null);
-  return { picks: picks.length, ...summarizePicks(picks) };
+  const all = modelPicks(scored, (row) => priceByKey.get(`${row.fixtureId}:${row.marketKey}:${row.selection}`) ?? null);
+  const unfiltered = summarizePicks(all);
+  const picks = filterPicks(all, filter);
+  return {
+    // Unfiltered totals feed the headline tile and the filter's options, so they stay stable while filtering.
+    total: all.length, overall: unfiltered.byMarket.find((row) => row.group === "ALL") ?? null,
+    groups: unfiltered.bySelection.map((row) => row.group),
+    picks: picks.length, ...(picks.length === all.length ? unfiltered : summarizePicks(picks))
+  };
 }
 
 /** Tier and market performance for current (non-superseded) ticket versions in the range. */

@@ -551,7 +551,9 @@ table button[type="submit"]:hover { border-color: var(--accent); color: var(--ac
 .date-step.disabled { opacity: .35; pointer-events: none; }
 .date-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .date-form label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 700; }
-.date-form input[type="date"] { height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; color-scheme: light dark; }
+.date-form input[type="date"], .date-form input[type="number"], .date-form select { height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; color-scheme: light dark; }
+.analysis-pick-filter { margin: 4px 0 12px; }
+.analysis-pick-filter input[type="number"] { width: 96px; }
 .date-go { height: 36px; padding: 0 14px; border: 1px solid var(--accent); border-radius: var(--r-sm); background: var(--accent-bg); color: var(--accent); font-weight: 800; font-size: 12px; cursor: pointer; }
 .date-chip { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text2); font-size: 12px; font-weight: 700; white-space: nowrap; }
 .date-chip:hover { border-color: var(--accent); color: var(--accent); }

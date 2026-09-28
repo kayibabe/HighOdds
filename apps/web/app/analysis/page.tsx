@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 import {
   CONFIDENCE_THRESHOLDS, DAILY_JOB_SCHEDULE, DIXON_COLES_RHO, EV_HAIRCUT, EXPECTED_GOALS_FLOOR, HISTORY_LOOKBACK_DAYS, IPF_ITERATIONS,
   JOB_LEASE_MINUTES, JOB_RETRY_MINUTES, LEAGUE_MIN_MATCHES, MAX_LEGS_PER_LEAGUE, MIN_LEG_ODDS, MIN_TICKET_LEGS, MODEL_METHOD,
-  QUOTE_MAX_AGE_MINUTES, resolveDayRange, SCORELINE_MAX_GOALS, SELECTION_WINDOW_HOURS, TEAM_MIN_MATCHES, TICKET_TIERS, utcToday,
-  type CalibrationBucket, type PickPerformance
+  isPickFilterActive, parsePickFilter, QUOTE_MAX_AGE_MINUTES, resolveDayRange, SCORELINE_MAX_GOALS, SELECTION_WINDOW_HOURS, TEAM_MIN_MATCHES,
+  TICKET_TIERS, utcToday, type CalibrationBucket, type DayRange, type PickFilter, type PickPerformance
 } from "@highodds/core";
 import { auth } from "../../auth";
 import { loadCalibration, loadModelCoverage, loadModelPicks, loadPipelineHealth, loadTicketPerformance, loadUpcomingFunnel } from "../../lib/analysis";
@@ -137,7 +137,34 @@ function ReliabilityChart({ buckets }: { buckets: CalibrationBucket[] }) {
   </svg>;
 }
 
-export default async function AnalysisPage({ searchParams }: { searchParams: Promise<{ range?: string | string[]; from?: string | string[]; to?: string | string[] }> }) {
+function PickFilterForm({ range, filter, groups }: { range: DayRange; filter: PickFilter; groups: string[] }) {
+  const markets = [...new Set(groups.map((group) => group.split(":")[0]!))];
+  const current = filter.market === null ? "" : filter.selection === null ? filter.market : `${filter.market}:${filter.selection}`;
+  const period: Record<string, string> = range.preset === "custom" ? { from: range.from!, to: range.to! } : { range: range.preset };
+  const clearHref = `/analysis?${new URLSearchParams(period).toString()}#picks`;
+  return <form className="date-form analysis-pick-filter" action="/analysis#picks" method="get" aria-label="Filter model picks">
+    {Object.entries(period).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />)}
+    <label>Pick
+      <select name="pick" defaultValue={current}>
+        <option value="">All picks</option>
+        {markets.map((market) => <optgroup key={market} label={label(market)}>
+          <option value={market}>Any {label(market).toLowerCase()} pick</option>
+          {groups.filter((group) => group.startsWith(`${market}:`)).map((group) => <option key={group} value={group}>{pickGroupLabel(group)}</option>)}
+        </optgroup>)}
+      </select>
+    </label>
+    <label>Min odds <input type="number" name="minOdds" min="1.01" max="1000" step="0.01" inputMode="decimal" placeholder="Any" defaultValue={filter.minOdds ?? ""} /></label>
+    <button type="submit" className="date-go">Apply</button>
+    {isPickFilterActive(filter) && <a className="date-chip" href={clearHref}>Clear filter</a>}
+  </form>;
+}
+
+function describeFilter(filter: PickFilter): string {
+  const pick = filter.market === null ? "all picks" : filter.selection === null ? `${label(filter.market).toLowerCase()} picks` : pickGroupLabel(`${filter.market}:${filter.selection}`);
+  return filter.minOdds === null ? pick : `${pick} at odds ≥ ${filter.minOdds.toFixed(2)}`;
+}
+
+export default async function AnalysisPage({ searchParams }: { searchParams: Promise<{ range?: string | string[]; from?: string | string[]; to?: string | string[]; pick?: string | string[]; minOdds?: string | string[] }> }) {
   const session = await auth();
   if (!session?.user?.email) redirect("/signin");
   if (session.user.role !== "ADMIN") redirect("/signin");
@@ -151,10 +178,11 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
   const [pipeline, funnel, model, calibration, tickets] = await Promise.all([
     loadPipelineHealth(now), loadUpcomingFunnel(now), loadModelCoverage(now), loadCalibration(range), loadTicketPerformance(range)
   ]);
-  const picks = await loadModelPicks(range, calibration.rows);
+  const pickFilter = parsePickFilter(params);
+  const picks = await loadModelPicks(range, calibration.rows, pickFilter);
 
   const pooled = calibration.byMarket.find((row) => row.market === "ALL") ?? null;
-  const allPicks = picks.byMarket.find((row) => row.group === "ALL") ?? null;
+  const allPicks = picks.overall;
   const ticketTotals = tickets.tiers.reduce((sum, tier) => ({ wins: sum.wins + tier.wins, decided: sum.decided + tier.wins + tier.losses }), { wins: 0, decided: 0 });
   const failingJobs = pipeline.jobHealth.filter((job) => job.latestStatus !== "DONE" && job.lastError).length;
   const todayQuota = pipeline.quota.find((row) => row.usageDate.toISOString().slice(0, 10) === today) ?? null;
@@ -356,7 +384,9 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
       <section id="picks" className="analysis-section" aria-labelledby="picks-title">
         <h2 id="picks-title">Model picks</h2>
         <p className="meta">Every finished fixture kicking off in <strong>{period}</strong>, not only the ones on tickets. The model pick is each market&apos;s highest-probability selection, as on the Research page, from the same walk-forward forecasts as calibration. ROI stakes one unit on every pick at its last pre-kickoff price from the highest-priority active bookmaker that quoted it; picks with no captured price count towards hit rate but not ROI.</p>
-        {picks.picks === 0 ? <div className="notice">No finished fixtures with a walk-forward pick in {period}.</div> : <>
+        {picks.total > 0 && <PickFilterForm range={range} filter={pickFilter} groups={picks.groups} />}
+        {isPickFilterActive(pickFilter) && picks.total > 0 && <p className="meta" role="status">Showing <strong>{describeFilter(pickFilter)}</strong>: {count(picks.picks)} of {count(picks.total)} picks.{pickFilter.minOdds !== null ? " A minimum price leaves out picks with no captured price, so hit rate and ROI cover the same bets." : ""}</p>}
+        {picks.total === 0 ? <div className="notice">No finished fixtures with a walk-forward pick in {period}.</div> : picks.picks === 0 ? <div className="notice">No picks match {describeFilter(pickFilter)} in {period}.</div> : <>
           <PickTable caption="By market" firstColumn="Market" rows={picks.byMarket} />
           <PickTable caption="By selection" firstColumn="Pick" rows={picks.bySelection} />
           <PickTable caption="By model confidence" firstColumn="Pick probability" rows={picks.byBand} />

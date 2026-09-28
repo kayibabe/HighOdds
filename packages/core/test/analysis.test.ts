@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  calibrationBuckets, calibrationByMarket, calibrationBySelection, median, modelPicks, summarizeLegs, summarizePicks, summarizeTiers,
+  calibrationBuckets, calibrationByMarket, calibrationBySelection, filterPicks, isPickFilterActive, median, modelPicks, NO_PICK_FILTER,
+  parsePickFilter, summarizeLegs, summarizePicks, summarizeTiers,
   type ModelPick, type ScoredPrediction
 } from "../src/analysis.js";
 
@@ -124,6 +125,28 @@ describe("summarizePicks", () => {
 
   it("returns empty groups for no picks", () => {
     expect(summarizePicks([])).toEqual({ byMarket: [], bySelection: [], byBand: [] });
+  });
+
+  it("filters by market, selection and minimum odds, dropping unpriced picks when odds are required", () => {
+    expect(filterPicks(picks, NO_PICK_FILTER)).toHaveLength(4);
+    expect(filterPicks(picks, { market: "MATCH_WINNER", selection: null, minOdds: null })).toHaveLength(3);
+    expect(filterPicks(picks, { market: "MATCH_WINNER", selection: "HOME", minOdds: null })).toHaveLength(2);
+    expect(filterPicks(picks, { market: "MATCH_WINNER", selection: "HOME", minOdds: 2.1 }).map((row) => row.closingOdds)).toEqual([2.1]);
+    expect(filterPicks(picks, { market: "TOTAL_GOALS", selection: null, minOdds: 1.01 })).toEqual([]);
+  });
+});
+
+describe("parsePickFilter", () => {
+  it("reads a market or market:selection and a minimum price", () => {
+    expect(parsePickFilter({ pick: "TOTAL_GOALS:OVER_2_5", minOdds: "1.5" })).toEqual({ market: "TOTAL_GOALS", selection: "OVER_2_5", minOdds: 1.5 });
+    expect(parsePickFilter({ pick: "BTTS" })).toEqual({ market: "BTTS", selection: null, minOdds: null });
+    expect(isPickFilterActive(parsePickFilter({}))).toBe(false);
+  });
+
+  it("ignores malformed or meaningless values", () => {
+    expect(parsePickFilter({ pick: "over; drop", minOdds: "abc" })).toEqual(NO_PICK_FILTER);
+    expect(parsePickFilter({ pick: ["BTTS"], minOdds: "1" })).toEqual(NO_PICK_FILTER);
+    expect(parsePickFilter({ minOdds: "" })).toEqual(NO_PICK_FILTER);
   });
 });
 

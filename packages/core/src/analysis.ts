@@ -181,6 +181,36 @@ function pickPerformance(group: string, picks: ModelPick[]): PickPerformance {
   };
 }
 
+/** Narrows the picks to test a strategy, e.g. only Over 2.5 at odds of 1.50 or more. */
+export interface PickFilter {
+  market: string | null;
+  selection: string | null;
+  /** Inclusive minimum closing price; unpriced picks are dropped because their odds are unknown. */
+  minOdds: number | null;
+}
+
+export const NO_PICK_FILTER: PickFilter = { market: null, selection: null, minOdds: null };
+
+/** Reads `pick` ("MARKET" or "MARKET:SELECTION") and `minOdds` from query parameters, ignoring malformed values. */
+export function parsePickFilter(params: { pick?: unknown; minOdds?: unknown }): PickFilter {
+  const pick = typeof params.pick === "string" ? /^([A-Z0-9_]+)(?::([A-Z0-9_]+))?$/.exec(params.pick) : null;
+  const minOdds = typeof params.minOdds === "string" && params.minOdds.trim() !== "" ? Number(params.minOdds) : NaN;
+  return {
+    market: pick?.[1] ?? null,
+    selection: pick?.[2] ?? null,
+    minOdds: Number.isFinite(minOdds) && minOdds > 1 && minOdds <= 1000 ? minOdds : null
+  };
+}
+
+export const isPickFilterActive = (filter: PickFilter) => filter.market !== null || filter.minOdds !== null;
+
+export function filterPicks(picks: ModelPick[], filter: PickFilter): ModelPick[] {
+  return picks.filter((pick) =>
+    (filter.market === null || pick.marketKey === filter.market)
+    && (filter.selection === null || pick.selection === filter.selection)
+    && (filter.minOdds === null || (pick.closingOdds !== null && pick.closingOdds >= filter.minOdds)));
+}
+
 /** Upper bounds (exclusive) of the pick-confidence bands; the last band is open-ended. */
 export const PICK_CONFIDENCE_BANDS = [0.5, 0.6, 0.7, 0.8] as const;
 
