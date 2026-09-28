@@ -5,6 +5,8 @@ import { generatePredictions } from "./predict.js";
 const SELECTION_WINDOW_MS = SELECTION_WINDOW_HOURS * 60 * 60 * 1000;
 
 const MARKET_OUTCOME_COUNT: Record<SupportedMarket, number> = { MATCH_WINNER: 3, TOTAL_GOALS: 2, BTTS: 2 };
+const TOTAL_GOALS_RULE_KEY = "TOTAL_GOALS_ODDS_1_80_V1";
+const TOTAL_GOALS_RULE_MIN_ODDS = 1.8;
 
 export interface PublishResult { published: number; predicted: number; predictionsSkipped: number; }
 
@@ -45,6 +47,37 @@ export async function publishTickets(now: Date): Promise<PublishResult> {
   });
   const predictionKey = (fixtureId: string, marketId: string, selection: string) => `${fixtureId}:${marketId}:${selection}`;
   const predictionByKey = new Map(predictions.map((prediction) => [predictionKey(prediction.fixtureId, prediction.marketId, prediction.selection), prediction]));
+
+  // Lock the prospective Total Goals cohort once per fixture. The unique key and skipDuplicates
+  // make this idempotent if the runner retries after the daily job has already captured prices.
+  const totalGoalsMarketIds = new Set(markets.filter((market) => market.normalizedKey === "TOTAL_GOALS").map((market) => market.id));
+  const priorityByBookmaker = new Map(activeBookmakers.map((bookmaker, index) => [bookmaker.id, index]));
+  const totalGoalsQuotes = new Map<string, typeof freshQuotes[number]>();
+  for (const quote of freshQuotes) {
+    if (!totalGoalsMarketIds.has(quote.marketId)) continue;
+    const key = `${quote.fixtureId}:${quote.selection}`;
+    const current = totalGoalsQuotes.get(key);
+    const currentRank = current ? priorityByBookmaker.get(current.bookmakerId) ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER;
+    const quoteRank = priorityByBookmaker.get(quote.bookmakerId) ?? Number.MAX_SAFE_INTEGER;
+    if (!current || quoteRank < currentRank || (quoteRank === currentRank && quote.capturedAt > current.capturedAt)) totalGoalsQuotes.set(key, quote);
+  }
+  const totalGoalsPickByFixture = new Map<string, { prediction: (typeof predictions)[number]; quote: (typeof freshQuotes)[number] }>();
+  for (const prediction of predictions) {
+    if (!totalGoalsMarketIds.has(prediction.marketId)) continue;
+    const quote = totalGoalsQuotes.get(`${prediction.fixtureId}:${prediction.selection}`);
+    if (!quote || Number(quote.decimalOdds) < TOTAL_GOALS_RULE_MIN_ODDS) continue;
+    const current = totalGoalsPickByFixture.get(prediction.fixtureId);
+    if (!current || Number(prediction.probability) > Number(current.prediction.probability)) totalGoalsPickByFixture.set(prediction.fixtureId, { prediction, quote });
+  }
+  if (totalGoalsPickByFixture.size > 0) {
+    await db.validationPick.createMany({
+      data: [...totalGoalsPickByFixture.values()].map(({ prediction, quote }) => ({
+        ruleKey: TOTAL_GOALS_RULE_KEY, fixtureId: prediction.fixtureId, marketKey: "TOTAL_GOALS", selection: prediction.selection,
+        probability: prediction.probability, decimalOdds: quote.decimalOdds, quoteId: quote.id, capturedAt: quote.capturedAt
+      })),
+      skipDuplicates: true
+    });
+  }
 
   // Devig consensus probability per (fixture, market, selection) averaged across bookmakers offering that market.
   const byFixtureBookmakerMarket = new Map<string, typeof freshQuotes>();

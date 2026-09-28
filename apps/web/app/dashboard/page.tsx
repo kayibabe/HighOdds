@@ -4,8 +4,10 @@ import { auth } from "../../auth";
 import { blantyreDayBounds, legOutcome, parseIsoDay, strongestPrediction, utcDate, utcToday, type StoredPrediction } from "@highodds/core";
 import { LEG_OUTCOME_LABEL, shortPickLabel } from "../../lib/selection";
 import { loadTicketCards } from "../../lib/tickets";
+import { loadTotalGoalsRuleDay } from "../../lib/total-goals";
 import { DayNav, formatDay } from "../date-nav";
 import TicketBoard from "./ticket-board";
+import TotalGoalsRule from "./total-goals-rule";
 
 export const dynamic = "force-dynamic";
 
@@ -29,8 +31,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const isToday = day === today;
   const localDay = blantyreDayBounds(day);
 
-  const [cardData, fixtures] = await Promise.all([
+  const [cardData, totalGoalsRule, fixtures] = await Promise.all([
     loadTicketCards({ targetDate: utcDate(day) }),
+    loadTotalGoalsRuleDay(day),
     db.fixture.findMany({
       where: { kickoff: { gte: localDay.start, lt: localDay.end } },
       orderBy: [{ kickoff: "asc" }, { id: "asc" }],
@@ -69,6 +72,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
       {cardData.length === 0 && <div className="notice">{isToday ? "No qualified selections today. Insufficient evidence to publish a paper ticket." : `No paper ticket was published for ${formatDay(day)}.`}</div>}
       <TicketBoard tickets={cardData} />
+      <TotalGoalsRule data={totalGoalsRule} />
 
       <section className="matches-section" aria-labelledby="matches-title">
         <h2 id="matches-title">{isToday ? "Today's matches" : `Matches on ${formatDay(day)}`}</h2>

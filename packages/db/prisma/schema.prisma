@@ -182,6 +182,7 @@ model Fixture {
   quotes      OddsQuote[]
   predictions Prediction[]
   ticketLegs  TicketLeg[]
+  validationPicks ValidationPick[]
 
   @@index([kickoff, status])
   @@index([competitionId, kickoff])
@@ -220,9 +221,29 @@ model OddsQuote {
   fixture           Fixture  @relation(fields: [fixtureId], references: [id])
   bookmaker         Bookmaker @relation(fields: [bookmakerId], references: [id])
   market            Market   @relation(fields: [marketId], references: [id])
+  validationPicks   ValidationPick[]
 
   @@index([fixtureId, capturedAt])
   @@index([bookmakerId, marketId, selection])
+}
+
+model ValidationPick {
+  id          String   @id @default(cuid())
+  ruleKey     String
+  fixtureId   String
+  marketKey   String
+  selection   String
+  probability Decimal  @db.Decimal(8, 6)
+  decimalOdds Decimal  @db.Decimal(10, 4)
+  quoteId     String
+  selectedAt  DateTime @default(now())
+  capturedAt  DateTime
+  fixture     Fixture  @relation(fields: [fixtureId], references: [id], onDelete: Restrict)
+  quote       OddsQuote @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+
+  @@unique([ruleKey, fixtureId, marketKey, selection])
+  @@index([ruleKey, selectedAt])
+  @@index([fixtureId])
 }
 
 model ModelRun {
