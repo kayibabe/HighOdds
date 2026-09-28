@@ -2,11 +2,11 @@ import { redirect } from "next/navigation";
 import {
   CONFIDENCE_THRESHOLDS, DAILY_JOB_SCHEDULE, DIXON_COLES_RHO, EV_HAIRCUT, EXPECTED_GOALS_FLOOR, HISTORY_LOOKBACK_DAYS, IPF_ITERATIONS,
   JOB_LEASE_MINUTES, JOB_RETRY_MINUTES, LEAGUE_MIN_MATCHES, MAX_LEGS_PER_LEAGUE, MIN_LEG_ODDS, MIN_TICKET_LEGS, MODEL_METHOD,
-  QUOTE_MAX_AGE_MINUTES, resolveDayRange, SCORELINE_MAX_GOALS, SELECTION_WINDOW_HOURS, TEAM_MIN_MATCHES, TICKET_TIERS, utcToday,
-  type CalibrationBucket
+  isPickFilterActive, parsePickFilter, QUOTE_MAX_AGE_MINUTES, resolveDayRange, SCORELINE_MAX_GOALS, SELECTION_WINDOW_HOURS, TEAM_MIN_MATCHES,
+  TICKET_TIERS, utcToday, type CalibrationBucket, type DayRange, type PickFilter, type PickPerformance
 } from "@highodds/core";
 import { auth } from "../../auth";
-import { loadCalibration, loadModelCoverage, loadPipelineHealth, loadTicketPerformance, loadUpcomingFunnel } from "../../lib/analysis";
+import { loadCalibration, loadModelCoverage, loadModelPicks, loadPipelineHealth, loadTicketPerformance, loadUpcomingFunnel } from "../../lib/analysis";
 import { RangeNav, rangeLabel } from "../date-nav";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +34,7 @@ const SECTIONS = [
   { id: "funnel", title: `Next ${SELECTION_WINDOW_HOURS}h funnel` },
   { id: "model", title: "Model coverage" },
   { id: "calibration", title: "Calibration" },
+  { id: "picks", title: "Model picks" },
   { id: "tickets", title: "Ticket performance" }
 ];
 
@@ -84,6 +85,35 @@ const PARAMETER_GROUPS: Array<{ title: string; rows: Parameter[] }> = [
   }
 ];
 
+const signedUnits = (value: number, digits = 2) => `${value > 0 ? "+" : ""}${value.toFixed(digits)}`;
+const roi = (value: number | null) => value === null ? "—" : `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+const tone = (value: number | null) => value === null || value === 0 ? "" : value > 0 ? "positive" : "negative";
+const pickGroupLabel = (group: string) => group === "ALL" ? "All markets" : group.split(":").map(label).join(" · ");
+
+function PickTable({ caption, firstColumn, rows }: { caption: string; firstColumn: string; rows: PickPerformance[] }) {
+  return <div className="matches-table-wrap">
+    <table className="analysis-table">
+      <caption>{caption}</caption>
+      <thead>
+        <tr><th scope="col">{firstColumn}</th><th scope="col">Picks</th><th scope="col">Hit rate</th><th scope="col">Expected</th><th scope="col">Priced</th><th scope="col">Avg odds</th><th scope="col">Profit (units)</th><th scope="col">ROI ± 1 s.e.</th><th scope="col">Value picks</th><th scope="col">Value hit rate</th><th scope="col">Value ROI</th></tr>
+      </thead>
+      <tbody>{rows.map((row) => <tr key={row.group} className={row.group === "ALL" ? "total" : undefined}>
+        <th scope="row">{pickGroupLabel(row.group)}</th>
+        <td className="num">{count(row.picks)}</td>
+        <td className="num">{pct(row.hitRate)} <small>({count(row.hits)})</small></td>
+        <td className="num">{pct(row.expectedHitRate)}</td>
+        <td className="num">{count(row.priced)}</td>
+        <td className="num">{num(row.avgOdds)}</td>
+        <td className={`num ${row.priced ? tone(row.profitUnits) : ""}`}>{row.priced ? signedUnits(row.profitUnits) : "—"}</td>
+        <td className={`num ${tone(row.roiPercent)}`}>{roi(row.roiPercent)}{row.roiStdErrPercent === null ? null : <small> ± {row.roiStdErrPercent.toFixed(1)}</small>}</td>
+        <td className="num">{count(row.valuePicks)}</td>
+        <td className="num">{pct(row.valueHitRate)}</td>
+        <td className={`num ${tone(row.valueRoiPercent)}`}>{roi(row.valueRoiPercent)}</td>
+      </tr>)}</tbody>
+    </table>
+  </div>;
+}
+
 function ReliabilityChart({ buckets }: { buckets: CalibrationBucket[] }) {
   const size = 260; const pad = 34; const plot = size - pad - 10;
   const x = (value: number) => pad + value * plot;
@@ -107,7 +137,34 @@ function ReliabilityChart({ buckets }: { buckets: CalibrationBucket[] }) {
   </svg>;
 }
 
-export default async function AnalysisPage({ searchParams }: { searchParams: Promise<{ range?: string | string[]; from?: string | string[]; to?: string | string[] }> }) {
+function PickFilterForm({ range, filter, groups }: { range: DayRange; filter: PickFilter; groups: string[] }) {
+  const markets = [...new Set(groups.map((group) => group.split(":")[0]!))];
+  const current = filter.market === null ? "" : filter.selection === null ? filter.market : `${filter.market}:${filter.selection}`;
+  const period: Record<string, string> = range.preset === "custom" ? { from: range.from!, to: range.to! } : { range: range.preset };
+  const clearHref = `/analysis?${new URLSearchParams(period).toString()}#picks`;
+  return <form className="date-form analysis-pick-filter" action="/analysis#picks" method="get" aria-label="Filter model picks">
+    {Object.entries(period).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />)}
+    <label>Pick
+      <select name="pick" defaultValue={current}>
+        <option value="">All picks</option>
+        {markets.map((market) => <optgroup key={market} label={label(market)}>
+          <option value={market}>Any {label(market).toLowerCase()} pick</option>
+          {groups.filter((group) => group.startsWith(`${market}:`)).map((group) => <option key={group} value={group}>{pickGroupLabel(group)}</option>)}
+        </optgroup>)}
+      </select>
+    </label>
+    <label>Min odds <input type="number" name="minOdds" min="1.01" max="1000" step="0.01" inputMode="decimal" placeholder="Any" defaultValue={filter.minOdds ?? ""} /></label>
+    <button type="submit" className="date-go">Apply</button>
+    {isPickFilterActive(filter) && <a className="date-chip" href={clearHref}>Clear filter</a>}
+  </form>;
+}
+
+function describeFilter(filter: PickFilter): string {
+  const pick = filter.market === null ? "all picks" : filter.selection === null ? `${label(filter.market).toLowerCase()} picks` : pickGroupLabel(`${filter.market}:${filter.selection}`);
+  return filter.minOdds === null ? pick : `${pick} at odds ≥ ${filter.minOdds.toFixed(2)}`;
+}
+
+export default async function AnalysisPage({ searchParams }: { searchParams: Promise<{ range?: string | string[]; from?: string | string[]; to?: string | string[]; pick?: string | string[]; minOdds?: string | string[] }> }) {
   const session = await auth();
   if (!session?.user?.email) redirect("/signin");
   if (session.user.role !== "ADMIN") redirect("/signin");
@@ -121,8 +178,11 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
   const [pipeline, funnel, model, calibration, tickets] = await Promise.all([
     loadPipelineHealth(now), loadUpcomingFunnel(now), loadModelCoverage(now), loadCalibration(range), loadTicketPerformance(range)
   ]);
+  const pickFilter = parsePickFilter(params);
+  const picks = await loadModelPicks(range, calibration.rows, pickFilter);
 
   const pooled = calibration.byMarket.find((row) => row.market === "ALL") ?? null;
+  const allPicks = picks.overall;
   const ticketTotals = tickets.tiers.reduce((sum, tier) => ({ wins: sum.wins + tier.wins, decided: sum.decided + tier.wins + tier.losses }), { wins: 0, decided: 0 });
   const failingJobs = pipeline.jobHealth.filter((job) => job.latestStatus !== "DONE" && job.lastError).length;
   const todayQuota = pipeline.quota.find((row) => row.usageDate.toISOString().slice(0, 10) === today) ?? null;
@@ -145,6 +205,7 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
         <article><small>Modelled competitions</small><strong>{count(model.competitions)}</strong><span>{model.stale > 0 ? `${count(model.stale)} older than ${model.staleBeforeHours}h` : "All trained recently"}</span></article>
         <article><small>Next {funnel.windowHours}h</small><strong>{count(funnel.steps[2]!.count)} / {count(funnel.steps[0]!.count)}</strong><span>fixtures with a prediction</span></article>
         <article><small>Brier · {period}</small><strong>{pooled ? pooled.brier.toFixed(4) : "—"}</strong><span>{count(calibration.scored)} scored forecasts</span></article>
+        <article><small>Model pick ROI · {period}</small><strong>{roi(allPicks?.roiPercent ?? null)}</strong><span>{allPicks ? `${pct(allPicks.hitRate)} hit rate · ${count(allPicks.priced)} priced picks` : "No scored picks"}</span></article>
         <article><small>Ticket hit rate · {period}</small><strong>{ticketTotals.decided ? pct(ticketTotals.wins / ticketTotals.decided) : "—"}</strong><span>{count(tickets.tickets)} tickets, {count(ticketTotals.decided)} decided</span></article>
         <article><small>Average CLV</small><strong>{tickets.clv === null ? "—" : `${tickets.clv.toFixed(2)}%`}</strong><span>settled legs in period</span></article>
         <article className={failingJobs > 0 ? "attention" : undefined}><small>Jobs needing attention</small><strong>{failingJobs}</strong><span>{todayQuota ? `API ${count(todayQuota.requestCount)} / ${count(todayQuota.quotaLimit)} today` : "No API calls today"}</span></article>
@@ -317,6 +378,19 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
               </table>
             </div>
           </div>
+        </>}
+      </section>
+
+      <section id="picks" className="analysis-section" aria-labelledby="picks-title">
+        <h2 id="picks-title">Model picks</h2>
+        <p className="meta">Every finished fixture kicking off in <strong>{period}</strong>, not only the ones on tickets. The model pick is each market&apos;s highest-probability selection, as on the Research page, from the same walk-forward forecasts as calibration. ROI stakes one unit on every pick at its last pre-kickoff price from the highest-priority active bookmaker that quoted it; picks with no captured price count towards hit rate but not ROI.</p>
+        {picks.total > 0 && <PickFilterForm range={range} filter={pickFilter} groups={picks.groups} />}
+        {isPickFilterActive(pickFilter) && picks.total > 0 && <p className="meta" role="status">Showing <strong>{describeFilter(pickFilter)}</strong>: {count(picks.picks)} of {count(picks.total)} picks.{pickFilter.minOdds !== null ? " A minimum price leaves out picks with no captured price, so hit rate and ROI cover the same bets." : ""}</p>}
+        {picks.total === 0 ? <div className="notice">No finished fixtures with a walk-forward pick in {period}.</div> : picks.picks === 0 ? <div className="notice">No picks match {describeFilter(pickFilter)} in {period}.</div> : <>
+          <PickTable caption="By market" firstColumn="Market" rows={picks.byMarket} />
+          <PickTable caption="By selection" firstColumn="Pick" rows={picks.bySelection} />
+          <PickTable caption="By model confidence" firstColumn="Pick probability" rows={picks.byBand} />
+          <p className="meta">Expected is the model&apos;s mean probability for the same picks; a hit rate below it means the model is overconfident. A value pick has probability × closing odds above 1, before the {pct(EV_HAIRCUT, 0)} ticket haircut. The ± figure is one standard error: an ROI within about two of them of zero is not distinguishable from luck.</p>
         </>}
       </section>
 
