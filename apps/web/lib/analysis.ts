@@ -1,7 +1,7 @@
 import { db } from "@highodds/db";
 import {
-  blantyreDayBounds, calibrationBuckets, calibrationByMarket, calibrationBySelection, displayLegOutcome, median,
-  parseSettlementEvidence, QUOTE_MAX_AGE_MINUTES, resolveSelection, SELECTION_WINDOW_HOURS, summarizeLegs, summarizeTiers, utcDate,
+  blantyreDayBounds, calibrationBuckets, calibrationByMarket, calibrationBySelection, displayLegOutcome, median, modelPicks,
+  parseSettlementEvidence, QUOTE_MAX_AGE_MINUTES, resolveSelection, SELECTION_WINDOW_HOURS, summarizeLegs, summarizePicks, summarizeTiers, utcDate,
   type DayRange, type LegSummaryInput, type ScoredPrediction, type TicketOutcome
 } from "@highodds/core";
 import { averageClv } from "./clv";
@@ -193,11 +193,36 @@ export async function loadCalibration(range: DayRange) {
     scored.push({ fixtureId: row.fixtureId, marketKey: row.marketKey, selection: row.selection, probability: row.probability, hit: result === "WIN" });
   }
   return {
-    scored: scored.length, excluded,
+    scored: scored.length, excluded, rows: scored,
     byMarket: calibrationByMarket(scored),
     bySelection: calibrationBySelection(scored),
     buckets: calibrationBuckets(scored)
   };
+}
+
+type ClosingPriceRow = { fixtureId: string; marketKey: string; selection: string; odds: number };
+
+/**
+ * Hit rate and flat-stake ROI of every model pick (the highest-probability selection per fixture and
+ * market) among the walk-forward forecasts scored by loadCalibration. Each pick is priced at the last
+ * pre-kickoff quote from the highest-priority active bookmaker that quoted it, the book a ticket would try first.
+ */
+export async function loadModelPicks(range: DayRange, scored: ScoredPrediction[]) {
+  if (scored.length === 0) return { picks: 0, ...summarizePicks([]) };
+  const { start, end } = kickoffBounds(range);
+  const prices = await db.$queryRaw<ClosingPriceRow[]>`
+    SELECT DISTINCT ON (q."fixtureId", q."marketId", q."selection")
+      q."fixtureId", m."normalizedKey" AS "marketKey", q."selection", q."decimalOdds"::float8 AS "odds"
+    FROM "OddsQuote" q
+      JOIN "Fixture" f ON f."id" = q."fixtureId"
+      JOIN "Market" m ON m."id" = q."marketId"
+      JOIN "Bookmaker" b ON b."id" = q."bookmakerId"
+    WHERE f."status" = 'FINISHED' AND f."kickoff" >= ${start} AND f."kickoff" < ${end}
+      AND q."capturedAt" < f."kickoff" AND b."active" = true AND m."normalizedKey" IS NOT NULL
+    ORDER BY q."fixtureId", q."marketId", q."selection", b."priority", b."id", q."capturedAt" DESC`;
+  const priceByKey = new Map(prices.map((row) => [`${row.fixtureId}:${row.marketKey}:${row.selection}`, row.odds]));
+  const picks = modelPicks(scored, (row) => priceByKey.get(`${row.fixtureId}:${row.marketKey}:${row.selection}`) ?? null);
+  return { picks: picks.length, ...summarizePicks(picks) };
 }
 
 /** Tier and market performance for current (non-superseded) ticket versions in the range. */

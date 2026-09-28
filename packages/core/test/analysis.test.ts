@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { calibrationBuckets, calibrationByMarket, calibrationBySelection, median, summarizeLegs, summarizeTiers, type ScoredPrediction } from "../src/analysis.js";
+import {
+  calibrationBuckets, calibrationByMarket, calibrationBySelection, median, modelPicks, summarizeLegs, summarizePicks, summarizeTiers,
+  type ModelPick, type ScoredPrediction
+} from "../src/analysis.js";
 
 // Two Match Winner fixtures and one Total Goals fixture, resolved against their final scores.
 const rows: ScoredPrediction[] = [
@@ -69,6 +72,58 @@ describe("calibrationBuckets", () => {
     expect(buckets[9]!.predictions).toBe(1);
     expect(buckets[0]!.predictions).toBe(0);
     expect(buckets[0]!.meanPredicted).toBeNull();
+  });
+});
+
+describe("modelPicks", () => {
+  it("takes the highest-probability selection per fixture and market with its closing price", () => {
+    const picks = modelPicks(rows, (row) => row.selection === "HOME" ? 2 : null);
+    expect(picks).toHaveLength(3);
+    expect(picks.find((pick) => pick.fixtureId === "f1" && pick.marketKey === "MATCH_WINNER")).toMatchObject({ selection: "HOME", hit: true, closingOdds: 2 });
+    expect(picks.find((pick) => pick.fixtureId === "f2")).toMatchObject({ selection: "HOME", hit: false, closingOdds: 2 });
+    expect(picks.find((pick) => pick.marketKey === "TOTAL_GOALS")).toMatchObject({ selection: "OVER_2_5", probability: 0.55, closingOdds: null });
+  });
+});
+
+describe("summarizePicks", () => {
+  const pick = (marketKey: string, selection: string, probability: number, hit: boolean, closingOdds: number | null): ModelPick =>
+    ({ fixtureId: `${marketKey}-${probability}-${closingOdds}`, marketKey, selection, probability, hit, closingOdds });
+  const picks = [
+    pick("MATCH_WINNER", "HOME", 0.55, true, 2.1),   // value, +1.1
+    pick("MATCH_WINNER", "HOME", 0.52, false, 1.8),  // no value, −1
+    pick("MATCH_WINNER", "AWAY", 0.45, false, 2.5),  // value, −1
+    pick("TOTAL_GOALS", "OVER_2_5", 0.82, true, null) // unpriced
+  ];
+  const { byMarket, bySelection, byBand } = summarizePicks(picks);
+
+  it("reports hit rate over every pick and flat-stake ROI over priced picks", () => {
+    const [matchWinner, totalGoals, all] = byMarket;
+    expect(matchWinner!.picks).toBe(3);
+    expect(matchWinner!.hitRate).toBeCloseTo(1 / 3, 10);
+    expect(matchWinner!.expectedHitRate).toBeCloseTo((0.55 + 0.52 + 0.45) / 3, 10);
+    expect(matchWinner!.profitUnits).toBeCloseTo(-0.9, 10);
+    expect(matchWinner!.roiPercent).toBeCloseTo(-30, 10);
+    // Sample SD of [1.1, −1, −1] is √1.47; SE = √(1.47 / 3).
+    expect(matchWinner!.roiStdErrPercent).toBeCloseTo(Math.sqrt(1.47 / 3) * 100, 8);
+    expect(matchWinner!.valuePicks).toBe(2);
+    expect(matchWinner!.valueHitRate).toBe(0.5);
+    expect(matchWinner!.valueRoiPercent).toBeCloseTo(5, 10);
+    expect(totalGoals!.hitRate).toBe(1);
+    expect(totalGoals!.priced).toBe(0);
+    expect(totalGoals!.roiPercent).toBeNull();
+    expect(totalGoals!.roiStdErrPercent).toBeNull();
+    expect(all!.group).toBe("ALL");
+    expect(all!.picks).toBe(4);
+    expect(all!.priced).toBe(3);
+  });
+
+  it("groups by selection and orders confidence bands from low to high", () => {
+    expect(bySelection.map((row) => row.group)).toEqual(["MATCH_WINNER:AWAY", "MATCH_WINNER:HOME", "TOTAL_GOALS:OVER_2_5"]);
+    expect(byBand.map((row) => [row.group, row.picks])).toEqual([["< 50%", 1], ["50–60%", 2], ["≥ 80%", 1]]);
+  });
+
+  it("returns empty groups for no picks", () => {
+    expect(summarizePicks([])).toEqual({ byMarket: [], bySelection: [], byBand: [] });
   });
 });
 

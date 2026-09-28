@@ -113,6 +113,101 @@ export function calibrationBuckets(rows: ScoredPrediction[], bucketCount = 10): 
   }));
 }
 
+/** The market's highest-probability selection for one fixture, with the closing price it could have been backed at. */
+export interface ModelPick {
+  fixtureId: string;
+  marketKey: string;
+  selection: string;
+  probability: number;
+  hit: boolean;
+  /** Last pre-kickoff price for the pick; null when no active bookmaker quoted it. */
+  closingOdds: number | null;
+}
+
+/** One pick per fixture and market: the selection with the highest probability (first wins a tie), as on the Research page. */
+export function modelPicks(rows: ScoredPrediction[], closingOdds: (row: ScoredPrediction) => number | null): ModelPick[] {
+  return [...groupBy(rows, (row) => `${row.fixtureId}\u0000${row.marketKey}`).values()].map((group) => {
+    const pick = group.reduce((best, row) => (row.probability > best.probability ? row : best));
+    return { fixtureId: pick.fixtureId, marketKey: pick.marketKey, selection: pick.selection, probability: pick.probability, hit: pick.hit, closingOdds: closingOdds(pick) };
+  });
+}
+
+export interface PickPerformance {
+  group: string;
+  picks: number;
+  hits: number;
+  hitRate: number | null;
+  /** Mean model probability over the same picks. */
+  expectedHitRate: number | null;
+  /** Picks with a closing price; profit and ROI cover only these. */
+  priced: number;
+  avgOdds: number | null;
+  /** One unit on every priced pick at its closing price. */
+  profitUnits: number;
+  roiPercent: number | null;
+  /** One standard error of the ROI, so a small sample is not read as an edge. */
+  roiStdErrPercent: number | null;
+  /** Priced picks where probability × closing odds > 1 (model edge before any haircut). */
+  valuePicks: number;
+  valueHitRate: number | null;
+  valueProfitUnits: number;
+  valueRoiPercent: number | null;
+}
+
+const pickProfit = (pick: ModelPick) => pick.hit ? pick.closingOdds! - 1 : -1;
+
+function pickPerformance(group: string, picks: ModelPick[]): PickPerformance {
+  const hits = picks.filter((pick) => pick.hit).length;
+  const priced = picks.filter((pick) => pick.closingOdds !== null);
+  const profits = priced.map(pickProfit);
+  const profitUnits = profits.reduce((sum, value) => sum + value, 0);
+  const meanProfit = mean(profits);
+  const variance = profits.length < 2 ? null : profits.reduce((sum, value) => sum + (value - meanProfit!) ** 2, 0) / (profits.length - 1);
+  const value = priced.filter((pick) => pick.probability * pick.closingOdds! > 1);
+  const valueProfitUnits = value.reduce((sum, pick) => sum + pickProfit(pick), 0);
+  return {
+    group, picks: picks.length, hits,
+    hitRate: picks.length === 0 ? null : hits / picks.length,
+    expectedHitRate: mean(picks.map((pick) => pick.probability)),
+    priced: priced.length,
+    avgOdds: mean(priced.map((pick) => pick.closingOdds!)),
+    profitUnits,
+    roiPercent: meanProfit === null ? null : meanProfit * 100,
+    roiStdErrPercent: variance === null ? null : Math.sqrt(variance / profits.length) * 100,
+    valuePicks: value.length,
+    valueHitRate: value.length === 0 ? null : value.filter((pick) => pick.hit).length / value.length,
+    valueProfitUnits,
+    valueRoiPercent: value.length === 0 ? null : valueProfitUnits / value.length * 100
+  };
+}
+
+/** Upper bounds (exclusive) of the pick-confidence bands; the last band is open-ended. */
+export const PICK_CONFIDENCE_BANDS = [0.5, 0.6, 0.7, 0.8] as const;
+
+function confidenceBand(probability: number): string {
+  const upper = PICK_CONFIDENCE_BANDS.findIndex((bound) => probability < bound);
+  if (upper === 0) return `< ${PICK_CONFIDENCE_BANDS[0] * 100}%`;
+  if (upper === -1) return `≥ ${PICK_CONFIDENCE_BANDS[PICK_CONFIDENCE_BANDS.length - 1]! * 100}%`;
+  return `${PICK_CONFIDENCE_BANDS[upper - 1]! * 100}–${PICK_CONFIDENCE_BANDS[upper]! * 100}%`;
+}
+
+/**
+ * Hit rate and flat-stake ROI of the model's picks: per market with a pooled "ALL" row, per market
+ * and selection (group "MARKET:SELECTION"), and per confidence band from least to most confident.
+ */
+export function summarizePicks(picks: ModelPick[]) {
+  if (picks.length === 0) return { byMarket: [], bySelection: [], byBand: [] };
+  const markets = [...new Set(picks.map((pick) => pick.marketKey))].sort();
+  const bandOrder = [0, ...PICK_CONFIDENCE_BANDS].map(confidenceBand);
+  return {
+    byMarket: [...markets.map((market) => pickPerformance(market, picks.filter((pick) => pick.marketKey === market))), pickPerformance("ALL", picks)],
+    bySelection: [...groupBy(picks, (pick) => `${pick.marketKey}:${pick.selection}`).entries()]
+      .map(([group, rows]) => pickPerformance(group, rows)).sort((a, b) => a.group.localeCompare(b.group)),
+    byBand: [...groupBy(picks, (pick) => confidenceBand(pick.probability)).entries()]
+      .map(([group, rows]) => pickPerformance(group, rows)).sort((a, b) => bandOrder.indexOf(a.group) - bandOrder.indexOf(b.group))
+  };
+}
+
 export interface TicketSummaryInput {
   tier: Tier;
   outcome: TicketOutcome;
