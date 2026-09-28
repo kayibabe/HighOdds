@@ -74,8 +74,8 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
 
   return <section>
     <p className="eyebrow">FIXTURE RESEARCH</p>
-    <h1>Research workspace</h1>
-    <p>Model probabilities, locally captured pre-kickoff prices, and the recorded result. A displayed probability is a model estimate, not a validated edge or betting recommendation.</p>
+    <h1>Fixture research</h1>
+    <p className="page-intro">Inspect one fixture from forecast to result: model probabilities, locally captured pre-kickoff prices, and the evidence used to score it. A probability is a model estimate, not a validated edge or betting recommendation.</p>
     <DayNav basePath="/research" day={day} today={today} allowFuture upcomingLabel="Upcoming" />
     <p className="meta">{day ? `Fixtures on ${formatDay(day)} (Blantyre time) with a model forecast or a published ticket leg.` : "Upcoming and recently started fixtures with a model forecast. Pick a date to review past matches."}</p>
     {fixtures.length === 0 && !selected ? <div className="notice">{day ? `No researched fixtures on ${formatDay(day)}.` : "No scored fixtures are available yet. Predictions appear after the model and evidence gates pass."}</div> : <div className="research-layout">

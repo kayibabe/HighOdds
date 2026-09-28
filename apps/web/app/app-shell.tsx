@@ -12,10 +12,10 @@ type NavItem = { href: string; label: string; icon: IconName; hint: string };
 type IconName = "home" | "sparkles" | "chart" | "shield" | "login" | "search" | "gauge";
 
 const WORKSPACE: NavItem[] = [
-  { href: "/", label: "Overview", icon: "home", hint: "How HighOdds works" },
-  { href: "/dashboard", label: "Dashboard", icon: "sparkles", hint: "Today's published research" },
-  { href: "/research", label: "Research", icon: "search", hint: "Fixture probabilities and price history" },
-  { href: "/results", label: "Results", icon: "chart", hint: "Verified paper history" }
+  { href: "/", label: "How it works", icon: "home", hint: "Evidence flow and product scope" },
+  { href: "/dashboard", label: "Today", icon: "sparkles", hint: "Published paper research and fixtures" },
+  { href: "/research", label: "Fixtures", icon: "search", hint: "Probabilities, prices, and match evidence" },
+  { href: "/results", label: "Results", icon: "chart", hint: "Settled paper history and model quality" }
 ];
 const ADMIN_ITEMS: NavItem[] = [
   { href: "/analysis", label: "Analysis", icon: "gauge", hint: "Parameters, model quality and pipeline health" },
@@ -99,7 +99,7 @@ export default function AppShell({ email, isAdmin, children }: Readonly<{ email:
       <header className="app-header">
         <a className="brand brand-compact" href="/" aria-label="HighOdds home"><BrandMark /></a>
         <div className="main-header-status">
-          <span className="research-status"><span className="status-dot" /> Paper research</span>
+          <span className="research-status"><span className="status-dot" /> Paper-only workspace</span>
           <ThemeToggle />
         </div>
         {current && <div className="global-page-context"><strong>{current.label}</strong><span>{current.hint}</span></div>}

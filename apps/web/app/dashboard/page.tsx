@@ -65,10 +65,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   return (
     <section>
       <p className="eyebrow">{isToday ? "TODAY'S RESEARCH" : "RESEARCH HISTORY"}</p>
-      <h1>Dashboard</h1>
+      <h1>Today&apos;s research</h1>
       <DayNav basePath="/dashboard" day={day} today={today} />
-      <p>Selections that met the evidence bar for <strong>{formatDay(day)}</strong> (UTC day, matching the publish schedule). Nothing appears here on days without a qualifying edge.</p>
-      <p><a href="#matches-title">View {fixtures.length} matches for {day} (Blantyre time)</a></p>
+      <p className="page-intro">Published paper tickets first, then the full fixture slate for <strong>{formatDay(day)}</strong>. Nothing appears here on days without a qualifying edge.</p>
+      <p><a className="inline-action" href="#matches-title">View {fixtures.length} matches for {day} (Blantyre time) ↓</a></p>
 
       {cardData.length === 0 && <div className="notice">{isToday ? "No qualified selections today. Insufficient evidence to publish a paper ticket." : `No paper ticket was published for ${formatDay(day)}.`}</div>}
       <TicketBoard tickets={cardData} />

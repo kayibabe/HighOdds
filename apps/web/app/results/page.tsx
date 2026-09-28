@@ -66,8 +66,8 @@ export default async function ResultsPage({ searchParams }: { searchParams: Prom
   return (
     <section>
       <p className="eyebrow">VERIFIED PAPER HISTORY</p>
-      <h1>Ticket outcomes</h1>
-      <p>Performance figures appear only after locally captured prices settle. Empty history is expected during setup.</p>
+      <h1>Verified results</h1>
+      <p className="page-intro">Review settled paper tickets and walk-forward model quality for the selected period. Performance figures appear only after locally captured prices settle.</p>
       <RangeNav basePath="/results" range={range} today={today} />
       <p className="meta">Showing <strong>{period}</strong>. Tickets are grouped by their UTC target date; model quality uses fixtures kicking off in the same days (Blantyre time).</p>
 

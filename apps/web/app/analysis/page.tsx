@@ -191,7 +191,7 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
   return (
     <section className="analysis">
       <p className="eyebrow">SYSTEM ANALYSIS</p>
-      <h1>Analysis</h1>
+      <h1>Model &amp; pipeline</h1>
       <p>Every parameter that shapes a paper ticket, from the rules the jobs apply to how the model and tickets have actually performed. The rule values below come from the same code the jobs run.</p>
 
       <nav className="analysis-toc" aria-label="Analysis sections">
