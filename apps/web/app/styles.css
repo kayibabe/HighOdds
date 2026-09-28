@@ -359,6 +359,11 @@ h2 { font-size: 1.15rem; letter-spacing: -0.01em; margin: 32px 0 12px; }
 .selection-view > p { margin-top: 14px; color: var(--text2); font-size: 12px; }
 
 .matches-section { margin-top: 44px; }
+.model-picks-day { margin-top: 44px; }
+.model-picks-day-table { min-width: 820px; }
+.model-picks-day-table th[scope="row"] { min-width: 220px; }
+.model-picks-day-table th[scope="row"] small { display: block; color: var(--muted); font-weight: 400; }
+.model-picks-day-table td, .model-picks-day-table th { vertical-align: middle; }
 .matches-section > p { color: var(--text2); font-size: 13px; }
 .total-goals-rule { margin-top: 44px; }
 .total-goals-rule-kpis article span { display: block; }

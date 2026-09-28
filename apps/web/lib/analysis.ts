@@ -232,6 +232,67 @@ export async function loadModelPicks(range: DayRange, scored: ScoredPrediction[]
   };
 }
 
+export interface DailyModelPick {
+  fixtureId: string;
+  kickoff: Date;
+  homeTeam: string;
+  awayTeam: string;
+  competition: string;
+  marketKey: string;
+  selection: string;
+  probability: number;
+  outcome: "WIN" | "LOSS";
+  onTicket: boolean;
+}
+
+/**
+ * The finished, walk-forward model picks for one dashboard day. This deliberately uses the same
+ * pre-kickoff and model-trained-before-forecast gates as the analysis page, then keeps the highest
+ * probability selection per fixture and market, matching the Model picks definition.
+ */
+export async function loadDailyModelPicks(day: string): Promise<DailyModelPick[]> {
+  const { start, end } = { start: blantyreDayBounds(day).start, end: blantyreDayBounds(day).end };
+  const rows = await db.$queryRaw<Array<{
+    fixtureId: string; kickoff: Date; homeTeam: string; awayTeam: string; competition: string;
+    marketKey: string; selection: string; probability: number; outcome: "WIN" | "LOSS";
+  }>>`
+    SELECT p."fixtureId", f."kickoff", ht."name" AS "homeTeam", at."name" AS "awayTeam", c."name" AS "competition",
+      m."normalizedKey" AS "marketKey", p."selection", p."probability"::float8 AS "probability",
+      CASE
+        WHEN m."normalizedKey" = 'MATCH_WINNER' AND p."selection" = CASE WHEN f."homeGoals" > f."awayGoals" THEN 'HOME' WHEN f."homeGoals" < f."awayGoals" THEN 'AWAY' ELSE 'DRAW' END THEN 'WIN'
+        WHEN m."normalizedKey" = 'TOTAL_GOALS' AND p."selection" = CASE WHEN f."homeGoals" + f."awayGoals" >= 3 THEN 'OVER_2_5' ELSE 'UNDER_2_5' END THEN 'WIN'
+        WHEN m."normalizedKey" = 'BTTS' AND p."selection" = CASE WHEN f."homeGoals" > 0 AND f."awayGoals" > 0 THEN 'YES' ELSE 'NO' END THEN 'WIN'
+        ELSE 'LOSS'
+      END AS "outcome"
+    FROM "Prediction" p
+      JOIN "Fixture" f ON f."id" = p."fixtureId"
+      JOIN "Market" m ON m."id" = p."marketId"
+      JOIN "ModelRun" mr ON mr."id" = p."modelRunId"
+      JOIN "Team" ht ON ht."id" = f."homeTeamId"
+      JOIN "Team" at ON at."id" = f."awayTeamId"
+      JOIN "Competition" c ON c."id" = f."competitionId"
+    WHERE f."status" = 'FINISHED' AND f."homeGoals" IS NOT NULL AND f."awayGoals" IS NOT NULL
+      AND m."normalizedKey" IS NOT NULL AND f."kickoff" >= ${start} AND f."kickoff" < ${end}
+      AND p."asOfAt" < f."kickoff" AND mr."trainedUntil" <= p."asOfAt"
+    ORDER BY p."fixtureId", p."marketId", p."selection", p."asOfAt" DESC`;
+  const best = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    const key = `${row.fixtureId}:${row.marketKey}`;
+    const current = best.get(key);
+    if (!current || row.probability > current.probability) best.set(key, row);
+  }
+  const picks = [...best.values()];
+  if (picks.length === 0) return [];
+  const ticketLegs = await db.ticketLeg.findMany({
+    where: { fixtureId: { in: [...new Set(picks.map((pick) => pick.fixtureId))] }, ticketVersion: { successors: { none: {} } } },
+    select: { fixtureId: true, marketKey: true, selection: true }
+  });
+  const ticketKeys = new Set(ticketLegs.map((leg) => `${leg.fixtureId}:${leg.marketKey}:${leg.selection}`));
+  return picks
+    .sort((a, b) => a.kickoff.getTime() - b.kickoff.getTime() || a.homeTeam.localeCompare(b.homeTeam) || a.marketKey.localeCompare(b.marketKey))
+    .map((pick) => ({ ...pick, probability: Number(pick.probability), onTicket: ticketKeys.has(`${pick.fixtureId}:${pick.marketKey}:${pick.selection}`) }));
+}
+
 /** Tier and market performance for current (non-superseded) ticket versions in the range. */
 export async function loadTicketPerformance(range: DayRange) {
   const tickets = await db.ticketVersion.findMany({
