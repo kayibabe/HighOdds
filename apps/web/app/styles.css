@@ -396,6 +396,7 @@ h2 { font-size: 1.15rem; letter-spacing: -0.01em; margin: 32px 0 12px; }
 .research-candidates th[scope="row"] a { color: var(--text); }
 .research-candidates th[scope="row"] small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; font-weight: 400; }
 .research-candidates td small { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.research-candidate-result { display: flex; align-items: center; gap: 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .research-layout { display: grid; grid-template-columns: minmax(220px, 290px) minmax(0, 1fr); gap: 22px; align-items: start; margin-top: 26px; }
 .research-fixtures { display: grid; gap: 8px; max-height: calc(100dvh - 145px); overflow: auto; position: sticky; top: 76px; }
 .research-fixture { display: grid; gap: 5px; padding: 13px 14px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); }
