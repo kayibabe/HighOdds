@@ -512,6 +512,12 @@ table {
 }
 th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border2); font-size: 13px; }
 th { color: var(--muted); font-weight: 700; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; background: var(--surface2); }
+th:has(.table-sort-button) { padding: 0; }
+.table-sort-button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 0; padding: 10px 12px; background: transparent; color: inherit; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
+.table-sort-button::after { content: "↕"; color: var(--muted); font-size: 12px; opacity: .7; }
+.table-sort-button[data-sort-direction="ascending"]::after { content: "↑"; color: var(--accent); opacity: 1; }
+.table-sort-button[data-sort-direction="descending"]::after { content: "↓"; color: var(--accent); opacity: 1; }
+.table-sort-button:hover, .table-sort-button:focus-visible { background: var(--surface2); color: var(--accent); outline: none; }
 tr:last-child td { border-bottom: none; }
 table form { display: inline; margin: 0; }
 table button[type="submit"] {

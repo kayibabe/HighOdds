@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { signOutAction } from "./actions";
 import ThemeToggle from "./theme-toggle";
+import TableSorters from "./sortable-table";
 
 // Sidebar app shell ported from lohela's frontend (App.tsx): brand + grouped icon nav on the left,
 // slim status header on top, bottom tab bar on phones. Sign-in renders standalone, as in lohela.
@@ -108,6 +109,7 @@ export default function AppShell({ email, isAdmin, children }: Readonly<{ email:
       </header>
 
       <main className="main" id="main-content" tabIndex={-1}>
+        <TableSorters />
         {children}
         <footer className="app-footer">18+ · Paper analysis only · No guaranteed outcomes</footer>
       </main>
