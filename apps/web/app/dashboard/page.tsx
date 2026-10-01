@@ -75,9 +75,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
       {cardData.length === 0 && <div className="notice">{isToday ? "No qualified selections today. Insufficient evidence to publish a paper ticket." : `No paper ticket was published for ${formatDay(day)}.`}</div>}
       <TicketBoard tickets={cardData} />
-      <TotalGoalsRule data={totalGoalsRule} />
-      <ModelPicks day={day} picks={dailyModelPicks} />
+      <details className="secondary-evidence">
+        <summary>Show model signals and supporting rules <small>Useful context when you want to inspect how today’s ticket was formed</small></summary>
+        <TotalGoalsRule data={totalGoalsRule} />
+        <ModelPicks day={day} picks={dailyModelPicks} />
+      </details>
 
+      <details className="secondary-evidence matches-disclosure">
+        <summary>Show today&apos;s full fixture slate <small>{fixtures.length} fixtures · model pick and ticket status</small></summary>
       <section className="matches-section" aria-labelledby="matches-title">
         <h2 id="matches-title">{isToday ? "Today's matches" : `Matches on ${formatDay(day)}`}</h2>
         <p>{fixtures.length} fixtures scheduled for {day} in Africa/Blantyre. Times are local. <strong>Model pick</strong> is the model&apos;s most confident pre-kickoff call ({pickCount} of {fixtures.length} matches had a prediction; only competitions with a trained model get one) — a research signal, not a betting selection. <strong>Ticket</strong> shows the selection actually published on a paper ticket.</p>
@@ -116,6 +121,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         )}
         <p className="meta">Fixture status is refreshed by the scheduled ingestion job; it is not a live score feed.</p>
       </section>
+      </details>
     </section>
   );
 }

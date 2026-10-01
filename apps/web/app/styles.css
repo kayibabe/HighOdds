@@ -240,6 +240,24 @@ h2 { font-size: 1.15rem; letter-spacing: -0.01em; margin: 32px 0 12px; }
 .btn-secondary:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
 .inline-action { display: inline-flex; padding: 7px 10px; border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border)); border-radius: var(--r-sm); background: var(--accent-bg); font-size: 12px; }
 .page-intro { max-width: 780px; color: var(--text2); }
+.home-page { max-width: 920px; }
+.home-principles { margin-top: 46px; }
+.home-principles .grid { margin-top: 18px; }
+.home-principles article { position: relative; }
+.home-principles article h3 { margin: 9px 0 5px; font-size: 1.05rem; }
+.home-principles article p { margin-bottom: 12px; }
+.home-principles article a { color: var(--accent); font-size: 12px; font-weight: 800; }
+.principle-index { color: var(--accent); font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
+.home-method, .secondary-evidence { margin-top: 18px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); }
+.home-method summary, .secondary-evidence summary { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 17px; color: var(--text2); cursor: pointer; font-size: 13px; font-weight: 800; list-style-position: inside; }
+.home-method summary::marker, .secondary-evidence summary::marker { color: var(--accent); }
+.home-method summary small, .secondary-evidence summary small { color: var(--muted); font-size: 11px; font-weight: 500; text-align: right; }
+.home-method[open] summary, .secondary-evidence[open] summary { border-bottom: 1px solid var(--border); }
+.home-method .flow-steps { margin: 0; padding: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.secondary-evidence > :not(summary) { margin-left: 18px; margin-right: 18px; }
+.secondary-evidence > section { margin-top: 0; }
+.matches-disclosure { margin-top: 30px; }
+.results-model-quality { margin-top: 30px; }
 .flow-panel { margin: 34px 0 12px; padding: 22px; border: 1px solid var(--border); border-radius: var(--r-xl); background: var(--surface); box-shadow: var(--shadow-sm); }
 .flow-panel h2 { margin: 5px 0 0; font-size: 1.35rem; }
 .flow-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }

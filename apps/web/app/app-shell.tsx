@@ -13,14 +13,13 @@ type NavItem = { href: string; label: string; icon: IconName; hint: string };
 type IconName = "home" | "sparkles" | "chart" | "shield" | "login" | "search" | "gauge";
 
 const WORKSPACE: NavItem[] = [
-  { href: "/", label: "How it works", icon: "home", hint: "Evidence flow and product scope" },
-  { href: "/dashboard", label: "Today", icon: "sparkles", hint: "Published paper research and fixtures" },
-  { href: "/research", label: "Fixtures", icon: "search", hint: "Probabilities, prices, and match evidence" },
+  { href: "/dashboard", label: "Today", icon: "sparkles", hint: "Published paper tickets and today’s slate" },
+  { href: "/research", label: "Research", icon: "search", hint: "Inspect fixtures, prices, and model evidence" },
   { href: "/results", label: "Results", icon: "chart", hint: "Settled paper history and model quality" }
 ];
 const ADMIN_ITEMS: NavItem[] = [
-  { href: "/analysis", label: "Analysis", icon: "gauge", hint: "Parameters, model quality and pipeline health" },
-  { href: "/admin", label: "Admin", icon: "shield", hint: "System administration" }
+  { href: "/analysis", label: "System health", icon: "gauge", hint: "Pipeline health and model diagnostics" },
+  { href: "/admin", label: "Administration", icon: "shield", hint: "Users, providers, and operations" }
 ];
 const SIGN_IN: NavItem = { href: "/signin", label: "Sign in", icon: "login", hint: "Subscriber and admin access" };
 
@@ -78,10 +77,10 @@ export default function AppShell({ email, isAdmin, children }: Readonly<{ email:
           </span>
         </a>
         <nav className="sidebar-nav" aria-label="Primary navigation">
-          <span className="sidebar-label">Workspace</span>
+          <span className="sidebar-label">Decision workspace</span>
           {workspace.map(navLink)}
           {isAdmin && <>
-            <span className="sidebar-label sidebar-label-admin">System</span>
+            <span className="sidebar-label sidebar-label-admin">Private tools</span>
             {ADMIN_ITEMS.map(navLink)}
           </>}
         </nav>
@@ -100,7 +99,7 @@ export default function AppShell({ email, isAdmin, children }: Readonly<{ email:
       <header className="app-header">
         <a className="brand brand-compact" href="/" aria-label="HighOdds home"><BrandMark /></a>
         <div className="main-header-status">
-          <span className="research-status"><span className="status-dot" /> Paper-only workspace</span>
+          <span className="research-status"><span className="status-dot" /> Paper validation</span>
           <ThemeToggle />
         </div>
         {current && <div className="global-page-context"><strong>{current.label}</strong><span>{current.hint}</span></div>}

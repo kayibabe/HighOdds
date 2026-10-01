@@ -95,6 +95,8 @@ export default async function ResultsPage({ searchParams }: { searchParams: Prom
           {ticketTotal > tickets.length && <p className="meta">Showing the latest {tickets.length} of {ticketTotal} tickets in this period. Narrow the dates to see older ones; the ROI and model figures above cover the whole period.</p>}
         </>}
 
+      <details className="secondary-evidence results-model-quality">
+      <summary>Show model quality <small>Walk-forward prediction quality, separate from ticket returns</small></summary>
       <h2>Model quality · walk-forward predictions</h2>
       <p>Only the latest prediction per fixture, market, and selection is included, and only when it was recorded before kickoff with a model trained no later than the forecast timestamp. Scores are pooled across supported markets and are descriptive; they are not proof of future performance.</p>
       <div className="grid">
@@ -103,6 +105,7 @@ export default async function ResultsPage({ searchParams }: { searchParams: Prom
         <article><h2>Excluded rows</h2><p>{excludedCount} (late forecast, model lookahead, or duplicate history)</p></article>
       </div>
       <p className="meta">Lower Brier is better; this pooled score can hide differences between markets and competitions. Market and competition breakdowns should follow once the evidence volume supports them.</p>
+      </details>
     </section>
   );
 }

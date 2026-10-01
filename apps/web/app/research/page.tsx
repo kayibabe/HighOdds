@@ -144,7 +144,8 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
     <h1>Fixture research</h1>
     <p className="page-intro">Inspect one fixture from forecast to result: model probabilities, locally captured pre-kickoff prices, and the evidence used to score it. A probability is a model estimate, not a validated edge or betting recommendation.</p>
     {screening ? <RangeNav basePath="/research" range={range} today={today} params={{ screen: "1", market: screenMarket, selection: screenSelection, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), stake: stakePerSelection.toFixed(2), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}) }} /> : <DayNav basePath="/research" day={day} today={today} allowFuture upcomingLabel="Upcoming" />}
-    <section className="research-screener" aria-labelledby="research-screener-title">
+    <details className="research-screener" aria-labelledby="research-screener-title" open={screening}>
+      <summary><span><span className="eyebrow">OPTIONAL TOOL</span><strong>Historical screener</strong></span><small>Compare stored forecasts and prices over time</small></summary>
       <div><p className="eyebrow">RESEARCH SCREENER</p><h2 id="research-screener-title">Find evidence-matched candidates</h2><p className="meta">Filter stored pre-kickoff model forecasts and active-bookmaker quotes. Submit the form to see historical selection analysis with settled P&amp;L, net, and ROI.</p></div>
       <form className="research-filter-form" action="/research" method="get">
         <input type="hidden" name="screen" value="1" />
@@ -158,7 +159,7 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
         <button className="date-go" type="submit">Find candidates</button>
       </form>
       <div className="research-presets"><span>Historical analysis:</span><Link href={screenHref({ minProbability: "60", minOdds: "1.8" })}>Last 30 days · Under 2.5 · ≥60% · ≥1.80</Link><Link href={screenHref({ minProbability: "60", minOdds: "2.1" })}>Last 30 days · Under 2.5 · ≥60% · ≥2.10</Link></div>
-    </section>
+    </details>
     {screening && <section className="research-candidates" aria-labelledby="research-candidates-title"><div className="section-heading"><div><p className="eyebrow">SELECTION ANALYSIS · {screenCandidates.length} MATCH{screenCandidates.length === 1 ? "" : "ES"}</p><h2 id="research-candidates-title">{label(screenSelection)} · P&amp;L / Net / ROI</h2></div><p className="meta">{label(screenMarket)} · {rangeLabel(range)} · probability ≥ {pct(minProbability)} · odds ≥ {minOdds.toFixed(2)}{maxQuoteAge ? ` · quote age ≤ ${maxQuoteAge} min` : ""}</p></div>
       <ResearchPerformanceSummary initialStake={stakePerSelection} settledCount={settledCount} wins={wins} losses={losses} voids={voids} pending={pending} returnsPerUnit={returnsPerUnit} netPerUnit={netPerUnit} roiPercent={roi} />
       {screenCandidates.length === 0 ? <div className="notice">No stored matches meet all filters for {rangeLabel(range)}. The analysis cards above are zeroed because there are no qualifying selections.</div> : <div className="matches-table-wrap"><table className="matches-table"><thead><tr><th>Match</th><th>Kickoff</th><th>Model probability</th><th>Captured odds</th><th>Bookmaker</th><th>Match result</th><th>Net P&amp;L</th><th>Evidence</th></tr></thead><tbody>{candidateResults.map((candidate) => {
