@@ -57,16 +57,17 @@ export function DayNav({ basePath, day, today, allowFuture = false, upcomingLabe
 }
 
 /** Range picker: preset periods plus a custom inclusive from/to range. */
-export function RangeNav({ basePath, range, today }: { basePath: string; range: DayRange; today: string }) {
+export function RangeNav({ basePath, range, today, params = {} }: { basePath: string; range: DayRange; today: string; params?: Record<string, string> }) {
   return (
     <nav className="date-nav" aria-label="Choose a period">
       <div className="date-nav-row date-jumps">
         {RANGE_PRESETS.map((preset) => {
           const active = range.preset === preset.key;
-          return <Link key={preset.key} className={`date-chip${active ? " active" : ""}`} href={href(basePath, { range: preset.key })} aria-current={active ? "page" : undefined}>{preset.label}</Link>;
+          return <Link key={preset.key} className={`date-chip${active ? " active" : ""}`} href={href(basePath, { ...params, range: preset.key })} aria-current={active ? "page" : undefined}>{preset.label}</Link>;
         })}
       </div>
       <form className="date-form date-range-form" action={basePath} method="get">
+        {Object.entries(params).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />)}
         <label>From <input type="date" name="from" defaultValue={range.from ?? ""} max={today} /></label>
         <label>To <input type="date" name="to" defaultValue={range.to ?? ""} max={today} /></label>
         <button type="submit" className="date-go">Show</button>
