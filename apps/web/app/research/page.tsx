@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "@highodds/db";
 import { blantyreDayBounds, blantyreToday, displayLegOutcome, parseIsoDay, parseSettlementEvidence, resolveDayRange, resolveSelection } from "@highodds/core";
 import { DayNav, formatDay, RangeNav, rangeLabel } from "../date-nav";
+import { ResearchMoneyCell, ResearchPerformanceSummary, ResearchStakeInput } from "../research-performance";
 
 export const dynamic = "force-dynamic";
 
@@ -128,10 +129,9 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
   const voids = settledCandidates.filter((candidate) => candidate.result === "VOID").length;
   const pending = candidateResults.length - settledCandidates.length;
   const settledCount = settledCandidates.length;
-  const totalStake = settledCount * stakePerSelection;
-  const returns = settledCandidates.reduce((sum, candidate) => sum + (candidate.result === "WIN" ? candidate.odds * stakePerSelection : 0), 0);
-  const net = settledCandidates.reduce((sum, candidate) => sum + candidate.profitUnits! * stakePerSelection, 0);
-  const roi = totalStake > 0 ? net / totalStake * 100 : null;
+  const returnsPerUnit = settledCandidates.reduce((sum, candidate) => sum + (candidate.result === "WIN" ? candidate.odds : 0), 0);
+  const netPerUnit = settledCandidates.reduce((sum, candidate) => sum + candidate.profitUnits!, 0);
+  const roi = settledCount > 0 ? netPerUnit / settledCount * 100 : null;
   const filterQuery = screening ? `&screen=1&market=${screenMarket}&selection=${screenSelection}&minProbability=${(minProbability * 100).toFixed(0)}&minOdds=${minOdds}&stake=${stakePerSelection}${maxQuoteAge ? `&maxQuoteAge=${maxQuoteAge}` : ""}${range.preset === "custom" ? `&from=${range.from}&to=${range.to}` : `&range=${range.preset}`}` : "";
   const listHref = (id: string) => `${day ? `/research?date=${day}` : "/research?fixture=" + id}${day ? `&fixture=${id}` : ""}${filterQuery}`;
   const screenHref = (overrides: Record<string, string> = {}) => {
@@ -153,27 +153,20 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
         <label>Selection<select name="selection" defaultValue={screenSelection}>{SCREEN_SELECTIONS.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></label>
         <label>Min probability %<input name="minProbability" type="number" min="0" max="100" step="1" defaultValue={Math.round(minProbability * 100)} /></label>
         <label>Min captured odds<input name="minOdds" type="number" min="1.01" max="1000" step="0.01" defaultValue={minOdds.toFixed(2)} /></label>
-        <label>Stake / selection<input name="stake" type="number" min="0.01" max="1000000" step="0.01" defaultValue={stakePerSelection.toFixed(2)} /></label>
+        <ResearchStakeInput initialStake={stakePerSelection} />
         <label>Max quote age at kickoff (min)<input name="maxQuoteAge" type="number" min="0" step="30" placeholder="Any" defaultValue={maxQuoteAge || ""} /></label>
         <button className="date-go" type="submit">Find candidates</button>
       </form>
       <div className="research-presets"><span>Historical analysis:</span><Link href={screenHref({ minProbability: "60", minOdds: "1.8" })}>Last 30 days · Under 2.5 · ≥60% · ≥1.80</Link><Link href={screenHref({ minProbability: "60", minOdds: "2.1" })}>Last 30 days · Under 2.5 · ≥60% · ≥2.10</Link></div>
     </section>
     {screening && <section className="research-candidates" aria-labelledby="research-candidates-title"><div className="section-heading"><div><p className="eyebrow">SELECTION ANALYSIS · {screenCandidates.length} MATCH{screenCandidates.length === 1 ? "" : "ES"}</p><h2 id="research-candidates-title">{label(screenSelection)} · P&amp;L / Net / ROI</h2></div><p className="meta">{label(screenMarket)} · {rangeLabel(range)} · probability ≥ {pct(minProbability)} · odds ≥ {minOdds.toFixed(2)}{maxQuoteAge ? ` · quote age ≤ ${maxQuoteAge} min` : ""}</p></div>
-      <div className="research-performance" aria-label="Selection performance summary">
-        <article><small>Settled</small><strong>{settledCount}</strong><span>{wins} won · {losses} lost · {voids} void · {pending} pending</span></article>
-        <article><small>Total stake</small><strong>{settledCount ? totalStake.toFixed(2) : "—"}</strong><span>{stakePerSelection.toFixed(2)} per settled selection</span></article>
-        <article><small>Returns</small><strong>{settledCount ? returns.toFixed(2) : "—"}</strong><span>wins paid at captured odds</span></article>
-        <article><small>Net P&amp;L</small><strong className={net > 0 ? "positive" : net < 0 ? "negative" : ""}>{settledCount ? `${net > 0 ? "+" : ""}${net.toFixed(2)}` : "—"}</strong><span>after settled selections</span></article>
-        <article><small>ROI</small><strong className={roi !== null && roi > 0 ? "positive" : roi !== null && roi < 0 ? "negative" : ""}>{roi === null ? "—" : `${roi > 0 ? "+" : ""}${roi.toFixed(1)}%`}</strong><span>net P&amp;L ÷ stake</span></article>
-      </div>
+      <ResearchPerformanceSummary initialStake={stakePerSelection} settledCount={settledCount} wins={wins} losses={losses} voids={voids} pending={pending} returnsPerUnit={returnsPerUnit} netPerUnit={netPerUnit} roiPercent={roi} />
       {screenCandidates.length === 0 ? <div className="notice">No stored matches meet all filters for {rangeLabel(range)}. The analysis cards above are zeroed because there are no qualifying selections.</div> : <div className="matches-table-wrap"><table className="matches-table"><thead><tr><th>Match</th><th>Kickoff</th><th>Model probability</th><th>Captured odds</th><th>Bookmaker</th><th>Match result</th><th>Net P&amp;L</th><th>Evidence</th></tr></thead><tbody>{candidateResults.map((candidate) => {
         const fixture = candidate.fixture;
         const scoreText = score(fixture);
         const outcomeLabel = candidate.result === "VOID" ? "Void" : candidate.result === "WIN" ? "Won" : candidate.result === "LOSS" ? "Lost" : "Pending";
         const outcomeClass = outcomeLabel.toLowerCase();
-        const moneyProfit = candidate.profitUnits === null ? null : candidate.profitUnits * stakePerSelection;
-        return <tr key={fixture.id}><th scope="row"><Link href={listHref(fixture.id)}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</Link><small>{fixture.competition.name}</small></th><td>{dateTime(fixture.kickoff)}</td><td className="num">{pct(candidate.probability)}</td><td className="num">{candidate.odds.toFixed(2)}</td><td>{candidate.bookmaker}</td><td className="research-candidate-result">{scoreText ?? "—"}<span className={`status-badge ${outcomeClass}`}>{outcomeLabel}</span></td><td className={`num ${moneyProfit !== null ? moneyProfit > 0 ? "positive" : moneyProfit < 0 ? "negative" : "" : ""}`}>{moneyProfit === null ? "—" : `${moneyProfit > 0 ? "+" : ""}${moneyProfit.toFixed(2)}`}</td><td><small>Forecast {dateTime(candidate.predictionAsOfAt)}<br />Quote {dateTime(candidate.quoteCapturedAt)}</small></td></tr>;
+        return <tr key={fixture.id}><th scope="row"><Link href={listHref(fixture.id)}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</Link><small>{fixture.competition.name}</small></th><td>{dateTime(fixture.kickoff)}</td><td className="num">{pct(candidate.probability)}</td><td className="num">{candidate.odds.toFixed(2)}</td><td>{candidate.bookmaker}</td><td className="research-candidate-result">{scoreText ?? "—"}<span className={`status-badge ${outcomeClass}`}>{outcomeLabel}</span></td><ResearchMoneyCell initialStake={stakePerSelection} profitUnits={candidate.profitUnits} /><td><small>Forecast {dateTime(candidate.predictionAsOfAt)}<br />Quote {dateTime(candidate.quoteCapturedAt)}</small></td></tr>;
       })}</tbody></table></div>}
     </section>}
     <p className="meta">{screening ? `Matches with a model forecast or published ticket leg in ${rangeLabel(range)} (Blantyre time).` : day ? `Fixtures on ${formatDay(day)} (Blantyre time) with a model forecast or a published ticket leg.` : "Upcoming and recently started fixtures with a model forecast. Pick a date to review past matches."}</p>
