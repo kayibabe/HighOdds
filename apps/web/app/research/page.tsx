@@ -39,7 +39,7 @@ function cleanScreenValue(value: string | string[] | undefined, allowed: readonl
 
 export default async function ResearchPage({ searchParams }: { searchParams: Promise<{
   fixture?: string | string[]; date?: string | string[]; range?: string | string[]; from?: string | string[]; to?: string | string[]; screen?: string | string[]; market?: string | string[];
-  selection?: string | string[]; minProbability?: string | string[]; minOdds?: string | string[]; maxQuoteAge?: string | string[];
+  selection?: string | string[]; minProbability?: string | string[]; minOdds?: string | string[]; maxQuoteAge?: string | string[]; stake?: string | string[];
 }> }) {
   const params = await searchParams;
   const { fixture: fixtureParam, date } = params;
@@ -50,6 +50,7 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
   const minProbability = Math.min(1, Math.max(0, numberParam(params.minProbability, 60) / 100));
   const minOdds = Math.max(1, numberParam(params.minOdds, 1.8));
   const maxQuoteAge = Math.max(0, numberParam(params.maxQuoteAge, 0));
+  const stakePerSelection = Math.min(1_000_000, Math.max(0.01, numberParam(params.stake, 1)));
   const now = new Date();
   const today = blantyreToday(now);
   const day = parseIsoDay(date);
@@ -126,14 +127,15 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
   const losses = settledCandidates.filter((candidate) => candidate.result === "LOSS").length;
   const voids = settledCandidates.filter((candidate) => candidate.result === "VOID").length;
   const pending = candidateResults.length - settledCandidates.length;
-  const stake = settledCandidates.length;
-  const returns = settledCandidates.reduce((sum, candidate) => sum + (candidate.result === "WIN" ? candidate.odds : 0), 0);
-  const net = settledCandidates.reduce((sum, candidate) => sum + candidate.profitUnits!, 0);
-  const roi = stake > 0 ? net / stake * 100 : null;
-  const filterQuery = screening ? `&screen=1&market=${screenMarket}&selection=${screenSelection}&minProbability=${(minProbability * 100).toFixed(0)}&minOdds=${minOdds}${maxQuoteAge ? `&maxQuoteAge=${maxQuoteAge}` : ""}${range.preset === "custom" ? `&from=${range.from}&to=${range.to}` : `&range=${range.preset}`}` : "";
+  const settledCount = settledCandidates.length;
+  const totalStake = settledCount * stakePerSelection;
+  const returns = settledCandidates.reduce((sum, candidate) => sum + (candidate.result === "WIN" ? candidate.odds * stakePerSelection : 0), 0);
+  const net = settledCandidates.reduce((sum, candidate) => sum + candidate.profitUnits! * stakePerSelection, 0);
+  const roi = totalStake > 0 ? net / totalStake * 100 : null;
+  const filterQuery = screening ? `&screen=1&market=${screenMarket}&selection=${screenSelection}&minProbability=${(minProbability * 100).toFixed(0)}&minOdds=${minOdds}&stake=${stakePerSelection}${maxQuoteAge ? `&maxQuoteAge=${maxQuoteAge}` : ""}${range.preset === "custom" ? `&from=${range.from}&to=${range.to}` : `&range=${range.preset}`}` : "";
   const listHref = (id: string) => `${day ? `/research?date=${day}` : "/research?fixture=" + id}${day ? `&fixture=${id}` : ""}${filterQuery}`;
   const screenHref = (overrides: Record<string, string> = {}) => {
-    const values = { ...(range.preset === "custom" ? { from: range.from!, to: range.to! } : { range: range.preset }), screen: "1", market: screenMarket, selection: screenSelection, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}), ...overrides };
+    const values = { ...(range.preset === "custom" ? { from: range.from!, to: range.to! } : { range: range.preset }), screen: "1", market: screenMarket, selection: screenSelection, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), stake: stakePerSelection.toFixed(2), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}), ...overrides };
     return `/research?${new URLSearchParams(Object.entries(values).filter(([, value]) => value !== "")).toString()}`;
   };
 
@@ -141,7 +143,7 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
     <p className="eyebrow">FIXTURE RESEARCH</p>
     <h1>Fixture research</h1>
     <p className="page-intro">Inspect one fixture from forecast to result: model probabilities, locally captured pre-kickoff prices, and the evidence used to score it. A probability is a model estimate, not a validated edge or betting recommendation.</p>
-    {screening ? <RangeNav basePath="/research" range={range} today={today} params={{ screen: "1", market: screenMarket, selection: screenSelection, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}) }} /> : <DayNav basePath="/research" day={day} today={today} allowFuture upcomingLabel="Upcoming" />}
+    {screening ? <RangeNav basePath="/research" range={range} today={today} params={{ screen: "1", market: screenMarket, selection: screenSelection, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), stake: stakePerSelection.toFixed(2), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}) }} /> : <DayNav basePath="/research" day={day} today={today} allowFuture upcomingLabel="Upcoming" />}
     <section className="research-screener" aria-labelledby="research-screener-title">
       <div><p className="eyebrow">RESEARCH SCREENER</p><h2 id="research-screener-title">Find evidence-matched candidates</h2><p className="meta">Filter stored pre-kickoff model forecasts and active-bookmaker quotes. Submit the form to see historical selection analysis with settled P&amp;L, net, and ROI.</p></div>
       <form className="research-filter-form" action="/research" method="get">
@@ -151,6 +153,7 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
         <label>Selection<select name="selection" defaultValue={screenSelection}>{SCREEN_SELECTIONS.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></label>
         <label>Min probability %<input name="minProbability" type="number" min="0" max="100" step="1" defaultValue={Math.round(minProbability * 100)} /></label>
         <label>Min captured odds<input name="minOdds" type="number" min="1.01" max="1000" step="0.01" defaultValue={minOdds.toFixed(2)} /></label>
+        <label>Stake / selection<input name="stake" type="number" min="0.01" max="1000000" step="0.01" defaultValue={stakePerSelection.toFixed(2)} /></label>
         <label>Max quote age at kickoff (min)<input name="maxQuoteAge" type="number" min="0" step="30" placeholder="Any" defaultValue={maxQuoteAge || ""} /></label>
         <button className="date-go" type="submit">Find candidates</button>
       </form>
@@ -158,10 +161,10 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
     </section>
     {screening && <section className="research-candidates" aria-labelledby="research-candidates-title"><div className="section-heading"><div><p className="eyebrow">SELECTION ANALYSIS · {screenCandidates.length} MATCH{screenCandidates.length === 1 ? "" : "ES"}</p><h2 id="research-candidates-title">{label(screenSelection)} · P&amp;L / Net / ROI</h2></div><p className="meta">{label(screenMarket)} · {rangeLabel(range)} · probability ≥ {pct(minProbability)} · odds ≥ {minOdds.toFixed(2)}{maxQuoteAge ? ` · quote age ≤ ${maxQuoteAge} min` : ""}</p></div>
       <div className="research-performance" aria-label="Selection performance summary">
-        <article><small>Settled</small><strong>{stake}</strong><span>{wins} won · {losses} lost · {voids} void · {pending} pending</span></article>
-        <article><small>Stake</small><strong>{stake.toFixed(2)}u</strong><span>one unit per settled selection</span></article>
-        <article><small>Returns</small><strong>{returns.toFixed(2)}u</strong><span>wins paid at captured odds</span></article>
-        <article><small>Net P&amp;L</small><strong className={net > 0 ? "positive" : net < 0 ? "negative" : ""}>{stake ? `${net > 0 ? "+" : ""}${net.toFixed(2)}u` : "—"}</strong><span>after settled selections</span></article>
+        <article><small>Settled</small><strong>{settledCount}</strong><span>{wins} won · {losses} lost · {voids} void · {pending} pending</span></article>
+        <article><small>Total stake</small><strong>{settledCount ? totalStake.toFixed(2) : "—"}</strong><span>{stakePerSelection.toFixed(2)} per settled selection</span></article>
+        <article><small>Returns</small><strong>{settledCount ? returns.toFixed(2) : "—"}</strong><span>wins paid at captured odds</span></article>
+        <article><small>Net P&amp;L</small><strong className={net > 0 ? "positive" : net < 0 ? "negative" : ""}>{settledCount ? `${net > 0 ? "+" : ""}${net.toFixed(2)}` : "—"}</strong><span>after settled selections</span></article>
         <article><small>ROI</small><strong className={roi !== null && roi > 0 ? "positive" : roi !== null && roi < 0 ? "negative" : ""}>{roi === null ? "—" : `${roi > 0 ? "+" : ""}${roi.toFixed(1)}%`}</strong><span>net P&amp;L ÷ stake</span></article>
       </div>
       {screenCandidates.length === 0 ? <div className="notice">No stored matches meet all filters for {rangeLabel(range)}. The analysis cards above are zeroed because there are no qualifying selections.</div> : <div className="matches-table-wrap"><table className="matches-table"><thead><tr><th>Match</th><th>Kickoff</th><th>Model probability</th><th>Captured odds</th><th>Bookmaker</th><th>Match result</th><th>Net P&amp;L</th><th>Evidence</th></tr></thead><tbody>{candidateResults.map((candidate) => {
@@ -169,7 +172,8 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
         const scoreText = score(fixture);
         const outcomeLabel = candidate.result === "VOID" ? "Void" : candidate.result === "WIN" ? "Won" : candidate.result === "LOSS" ? "Lost" : "Pending";
         const outcomeClass = outcomeLabel.toLowerCase();
-        return <tr key={fixture.id}><th scope="row"><Link href={listHref(fixture.id)}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</Link><small>{fixture.competition.name}</small></th><td>{dateTime(fixture.kickoff)}</td><td className="num">{pct(candidate.probability)}</td><td className="num">{candidate.odds.toFixed(2)}</td><td>{candidate.bookmaker}</td><td className="research-candidate-result">{scoreText ?? "—"}<span className={`status-badge ${outcomeClass}`}>{outcomeLabel}</span></td><td className={`num ${candidate.profitUnits !== null ? candidate.profitUnits > 0 ? "positive" : candidate.profitUnits < 0 ? "negative" : "" : ""}`}>{candidate.profitUnits === null ? "—" : `${candidate.profitUnits > 0 ? "+" : ""}${candidate.profitUnits.toFixed(2)}u`}</td><td><small>Forecast {dateTime(candidate.predictionAsOfAt)}<br />Quote {dateTime(candidate.quoteCapturedAt)}</small></td></tr>;
+        const moneyProfit = candidate.profitUnits === null ? null : candidate.profitUnits * stakePerSelection;
+        return <tr key={fixture.id}><th scope="row"><Link href={listHref(fixture.id)}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</Link><small>{fixture.competition.name}</small></th><td>{dateTime(fixture.kickoff)}</td><td className="num">{pct(candidate.probability)}</td><td className="num">{candidate.odds.toFixed(2)}</td><td>{candidate.bookmaker}</td><td className="research-candidate-result">{scoreText ?? "—"}<span className={`status-badge ${outcomeClass}`}>{outcomeLabel}</span></td><td className={`num ${moneyProfit !== null ? moneyProfit > 0 ? "positive" : moneyProfit < 0 ? "negative" : "" : ""}`}>{moneyProfit === null ? "—" : `${moneyProfit > 0 ? "+" : ""}${moneyProfit.toFixed(2)}`}</td><td><small>Forecast {dateTime(candidate.predictionAsOfAt)}<br />Quote {dateTime(candidate.quoteCapturedAt)}</small></td></tr>;
       })}</tbody></table></div>}
     </section>}
     <p className="meta">{screening ? `Matches with a model forecast or published ticket leg in ${rangeLabel(range)} (Blantyre time).` : day ? `Fixtures on ${formatDay(day)} (Blantyre time) with a model forecast or a published ticket leg.` : "Upcoming and recently started fixtures with a model forecast. Pick a date to review past matches."}</p>
