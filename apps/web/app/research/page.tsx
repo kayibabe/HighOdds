@@ -11,6 +11,7 @@ const dateTime = (value: Date) => new Intl.DateTimeFormat("en-GB", { timeZone: "
 const label = (value: string) => value.replaceAll("_", " ");
 const score = (fixture: { homeGoals: number | null; awayGoals: number | null }) => fixture.homeGoals !== null && fixture.awayGoals !== null ? `${fixture.homeGoals}–${fixture.awayGoals}` : null;
 const LEG_OUTCOME_LABEL: Record<string, string> = { WIN: "Won", LOSS: "Lost", VOID: "Void", PENDING: "Pending", UNRESOLVED: "Unresolved" };
+const HIGH_PROBABILITY_THRESHOLD = 0.6;
 const SCREEN_MARKETS = ["TOTAL_GOALS", "MATCH_WINNER", "BTTS"] as const;
 const SCREEN_SELECTIONS = ["UNDER_2_5", "OVER_2_5", "HOME", "DRAW", "AWAY", "YES", "NO"] as const;
 
@@ -72,6 +73,35 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
   const selected = fixtures.find((fixture) => fixture.id === fixtureId)
     ?? (fixtureId ? await db.fixture.findUnique({ where: { id: fixtureId }, include: fixtureInclude }) : null)
     ?? fixtures[0];
+
+  const highProbabilityRows = fixtures.flatMap((fixture) => {
+    const latestByMarketSelection = new Map<string, (typeof fixture.predictions)[number]>();
+    fixture.predictions
+      .filter((row) => row.asOfAt < fixture.kickoff && row.modelRun.trainedUntil <= row.asOfAt)
+      .forEach((row) => {
+        const key = `${row.market.normalizedKey ?? row.market.name}:${row.selection}`;
+        const current = latestByMarketSelection.get(key);
+        if (!current || row.asOfAt > current.asOfAt) latestByMarketSelection.set(key, row);
+      });
+
+    const byMarket = new Map<string, (typeof fixture.predictions)[number][]>();
+    for (const prediction of latestByMarketSelection.values()) {
+      const market = prediction.market.normalizedKey ?? prediction.market.name;
+      const rows = byMarket.get(market) ?? [];
+      rows.push(prediction);
+      byMarket.set(market, rows);
+    }
+
+    return Array.from(byMarket.entries()).flatMap(([market, rows]) => {
+      const pick = rows.reduce((best, row) => Number(row.probability) > Number(best.probability) ? row : best);
+      if (Number(pick.probability) < HIGH_PROBABILITY_THRESHOLD) return [];
+      const finishedScore = fixture.status === "FINISHED" && fixture.homeGoals !== null && fixture.awayGoals !== null
+        ? { home: fixture.homeGoals, away: fixture.awayGoals }
+        : null;
+      const outcome = finishedScore ? resolveSelection(market, pick.selection, finishedScore.home, finishedScore.away) : null;
+      return [{ fixture, market, pick, outcome }];
+    });
+  });
 
   const screenCandidates = screening ? fixtures.flatMap((fixture) => {
     const prediction = fixture.predictions
@@ -170,6 +200,17 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
         return <tr key={fixture.id}><th scope="row"><Link href={listHref(fixture.id)}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</Link><small>{fixture.competition.name}</small></th><td>{dateTime(fixture.kickoff)}</td><td className="num">{pct(candidate.probability)}</td><td className="num">{candidate.odds.toFixed(2)}</td><td>{candidate.bookmaker}</td><td className="research-candidate-result">{scoreText ?? "—"}<span className={`status-badge ${outcomeClass}`}>{outcomeLabel}</span></td><ResearchMoneyCell initialStake={stakePerSelection} profitUnits={candidate.profitUnits} /><td><small>Forecast {dateTime(candidate.predictionAsOfAt)}<br />Quote {dateTime(candidate.quoteCapturedAt)}</small></td></tr>;
       })}</tbody></table></div>}
     </section>}
+    <section className="research-high-probability" aria-labelledby="research-high-probability-title">
+      <div className="section-heading"><div><p className="eyebrow">HIGH-PROBABILITY MARKET OUTCOMES</p><h2 id="research-high-probability-title">Strongest model picks</h2></div><p className="meta">Markets at or above {pct(HIGH_PROBABILITY_THRESHOLD)} · result shown only after a final score</p></div>
+      {highProbabilityRows.length === 0 ? <div className="notice">No high-probability market picks are available for this view.</div> : <div className="matches-table-wrap"><table className="matches-table"><thead><tr><th>Match</th><th>Kickoff</th><th>Market</th><th>Model outcome</th><th>Probability</th><th>Result</th></tr></thead><tbody>{highProbabilityRows.map(({ fixture, market, pick, outcome }) => <tr key={`${fixture.id}-${market}`}>
+        <th scope="row"><Link href={listHref(fixture.id)}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</Link><small>{fixture.competition.name}</small></th>
+        <td>{dateTime(fixture.kickoff)}</td>
+        <td>{label(market)}</td>
+        <td>{label(pick.selection)}</td>
+        <td className="num">{pct(Number(pick.probability))}</td>
+        <td>{outcome ? <span className={`status-badge ${outcome.toLowerCase()}`}>{outcome === "WIN" ? "Won" : "Lost"} · {score(fixture)}</span> : <span className="sr-only">Not played</span>}</td>
+      </tr>)}</tbody></table></div>}
+    </section>
     <p className="meta">{screening ? `Matches with a model forecast or published ticket leg in ${rangeLabel(range)} (Blantyre time).` : day ? `Fixtures on ${formatDay(day)} (Blantyre time) with a model forecast or a published ticket leg.` : "Upcoming and recently started fixtures with a model forecast. Pick a date to review past matches."}</p>
     {fixtures.length === 0 && !selectedFixture ? <div className="notice">{day ? `No researched fixtures on ${formatDay(day)}.` : "No scored fixtures are available yet. Predictions appear after the model and evidence gates pass."}</div> : <div className="research-layout">
       <nav className="research-fixtures" aria-label="Scored fixtures">
