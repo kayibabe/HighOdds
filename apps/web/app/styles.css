@@ -417,6 +417,11 @@ h2 { font-size: 1.15rem; letter-spacing: -0.01em; margin: 32px 0 12px; }
 .research-candidate-result { display: flex; align-items: center; gap: 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .research-high-probability { display: grid; gap: 12px; margin-top: 24px; }
 .research-high-probability h2 { margin: 3px 0 0; font-size: clamp(1.1rem, 2.5vw, 1.45rem); }
+.research-selector-summary { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface2); }
+.research-selector-summary h3 { margin: 2px 0 0; font-size: 1rem; }
+.research-selector-summary .matches-table { min-width: 680px; margin: 0; }
+.research-selector-summary th[scope="row"] { min-width: 220px; color: var(--text); text-transform: none; letter-spacing: 0; background: var(--surface); }
+.research-selector-summary td { font-variant-numeric: tabular-nums; }
 .research-high-probability-groups { display: grid; gap: 8px; }
 .research-high-probability-groups > details, .research-high-probability-months > details, .research-high-probability-days > details { border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); overflow: hidden; }
 .research-high-probability-groups summary, .research-high-probability-months summary, .research-high-probability-days summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; cursor: pointer; list-style-position: inside; }
