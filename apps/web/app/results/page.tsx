@@ -2,7 +2,7 @@ import { db } from "@highodds/db";
 import { blantyreDayBounds, computeRoi, resolveDayRange, utcDate, utcToday, type DayRange } from "@highodds/core";
 import { averageClv } from "../../lib/clv";
 import { loadTicketCards } from "../../lib/tickets";
-import TicketBoard from "../dashboard/ticket-board";
+import TicketBoard, { type TicketCardData } from "../dashboard/ticket-board";
 import { RangeNav, rangeLabel } from "../date-nav";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +17,30 @@ function targetDateFilter(range: DayRange) {
 function kickoffFilter(range: DayRange) {
   if (!range.from || !range.to) return {};
   return { kickoff: { gte: blantyreDayBounds(range.from).start, lt: blantyreDayBounds(range.to).end } };
+}
+
+function groupTickets(tickets: TicketCardData[]) {
+  const years = new Map<string, Map<string, Map<string, TicketCardData[]>>>();
+  for (const ticket of tickets) {
+    const year = ticket.targetDate.slice(0, 4);
+    const month = ticket.targetDate.slice(0, 7);
+    const yearGroup = years.get(year) ?? new Map<string, Map<string, TicketCardData[]>>();
+    const monthGroup = yearGroup.get(month) ?? new Map<string, TicketCardData[]>();
+    const dayGroup = monthGroup.get(ticket.targetDate) ?? [];
+    dayGroup.push(ticket);
+    monthGroup.set(ticket.targetDate, dayGroup);
+    yearGroup.set(month, monthGroup);
+    years.set(year, yearGroup);
+  }
+  return years;
+}
+
+function monthLabel(month: string) {
+  return new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00.000Z`));
+}
+
+function dayLabel(day: string) {
+  return new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${day}T00:00:00.000Z`));
 }
 
 export default async function ResultsPage({ searchParams }: { searchParams: Promise<{ range?: string | string[]; from?: string | string[]; to?: string | string[] }> }) {
@@ -62,6 +86,7 @@ export default async function ResultsPage({ searchParams }: { searchParams: Prom
   const counts = { WIN: 0, LOSS: 0, VOID: 0 };
   for (const row of settlementRows) if (row.outcome !== "PENDING") counts[row.outcome] += 1;
   const pendingCount = ticketTotal - counts.WIN - counts.LOSS - counts.VOID;
+  const ticketGroups = groupTickets(tickets);
 
   return (
     <section>
@@ -91,7 +116,34 @@ export default async function ResultsPage({ searchParams }: { searchParams: Prom
             <span className="status-badge void">{counts.VOID} void</span>
             <span className="status-badge pending">{pendingCount} pending</span>
           </p>
-          <TicketBoard tickets={tickets} eyebrow="TICKET HISTORY" title="Tickets and their legs" showDate />
+          <section className="results-ticket-history" aria-labelledby="ticket-history-title">
+            <div className="ticket-board-heading">
+              <div><p className="eyebrow">TICKET HISTORY</p><h2 id="ticket-history-title">Accumulator tickets</h2></div>
+              <p>Open a year, month, day, and then an accumulator to review its legs and evidence.</p>
+            </div>
+            <div className="results-ticket-years">
+              {Array.from(ticketGroups.entries()).sort(([a], [b]) => b.localeCompare(a)).map(([year, months]) => {
+                const yearTickets = Array.from(months.values()).reduce((sum, days) => sum + Array.from(days.values()).reduce((daySum, dayTickets) => daySum + dayTickets.length, 0), 0);
+                return <details key={year} className="results-ticket-year">
+                  <summary><strong>{year}</strong><small>{yearTickets} ticket{yearTickets === 1 ? "" : "s"}</small></summary>
+                  <div className="results-ticket-months">
+                    {Array.from(months.entries()).sort(([a], [b]) => b.localeCompare(a)).map(([month, days]) => {
+                      const monthTickets = Array.from(days.values()).reduce((sum, dayTickets) => sum + dayTickets.length, 0);
+                      return <details key={month} className="results-ticket-month">
+                        <summary><strong>{monthLabel(month)}</strong><small>{monthTickets} ticket{monthTickets === 1 ? "" : "s"}</small></summary>
+                        <div className="results-ticket-days">
+                          {Array.from(days.entries()).sort(([a], [b]) => b.localeCompare(a)).map(([day, dayTickets]) => <details key={day} className="results-ticket-day">
+                            <summary><strong>{dayLabel(day)}</strong><small>{dayTickets.length} ticket{dayTickets.length === 1 ? "" : "s"}</small></summary>
+                            <TicketBoard tickets={dayTickets} compact showHeading={false} />
+                          </details>)}
+                        </div>
+                      </details>;
+                    })}
+                  </div>
+                </details>;
+              })}
+            </div>
+          </section>
           {ticketTotal > tickets.length && <p className="meta">Showing the latest {tickets.length} of {ticketTotal} tickets in this period. Narrow the dates to see older ones; the ROI and model figures above cover the whole period.</p>}
         </>}
 

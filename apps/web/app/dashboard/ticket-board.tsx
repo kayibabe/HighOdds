@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { LEG_OUTCOME_LABEL, selectionLabel } from "../../lib/selection";
 
 export type TicketLegData = {
@@ -239,8 +239,8 @@ function DetailPanel({ selected, onClose }: { selected: SelectedLeg; onClose: ()
   );
 }
 
-export default function TicketBoard({ tickets, eyebrow = "PRIMARY RESEARCH OUTPUT", title = "Published recommendations", showDate = false }: {
-  tickets: TicketCardData[]; eyebrow?: string; title?: string; showDate?: boolean;
+export default function TicketBoard({ tickets, eyebrow = "PRIMARY RESEARCH OUTPUT", title = "Published recommendations", showDate = false, compact = false, showHeading = true }: {
+  tickets: TicketCardData[]; eyebrow?: string; title?: string; showDate?: boolean; compact?: boolean; showHeading?: boolean;
 }) {
   const [selected, setSelected] = useState<SelectedLeg | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -253,13 +253,13 @@ export default function TicketBoard({ tickets, eyebrow = "PRIMARY RESEARCH OUTPU
 
   return (
     <>
-      <div className="ticket-board-heading">
+      {showHeading && <div className="ticket-board-heading">
         <div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div>
         <p>Each leg shows whether it won, lost, or was voided. Open a match for its recorded model, market, odds, and result details.</p>
-      </div>
+      </div>}
       <div className="ticket-cards">
-        {tickets.map((ticket) => (
-          <article key={ticket.id} className={`ticket-card premium-ticket tier-${ticket.tier.toLowerCase()}`}>
+        {tickets.map((ticket) => {
+          const card = <article className={`ticket-card premium-ticket tier-${ticket.tier.toLowerCase()}`}>
             <div className="premium-ticket-top">
               <div className="premium-ticket-title">
                 <h3><span className="tier-dot" />{TIER_LABEL[ticket.tier] ?? ticket.tier}</h3>
@@ -311,8 +311,20 @@ export default function TicketBoard({ tickets, eyebrow = "PRIMARY RESEARCH OUTPU
                 );
               })}
             </ul>
-          </article>
-        ))}
+          </article>;
+          if (!compact) return <Fragment key={ticket.id}>{card}</Fragment>;
+          return <details key={ticket.id} className={`ticket-history-item tier-${ticket.tier.toLowerCase()}`}>
+            <summary className="ticket-history-summary">
+              <strong><span className="tier-dot" />{TIER_LABEL[ticket.tier] ?? ticket.tier}</strong>
+              <span>{ticket.targetDate}</span>
+              <span className={`status-badge ${ticket.outcome.toLowerCase()}`}>{ticket.outcome}</span>
+              <span>{ticket.legs.length} legs</span>
+              <span>{ticket.combinedOdds.toFixed(2)}×</span>
+              <span className="ticket-history-arrow" aria-hidden="true">›</span>
+            </summary>
+            {card}
+          </details>;
+        })}
       </div>
       {selected && <DetailPanel key={selected.leg.id} selected={selected} onClose={close} />}
     </>

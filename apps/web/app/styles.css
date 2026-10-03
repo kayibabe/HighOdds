@@ -258,6 +258,39 @@ h2 { font-size: 1.15rem; letter-spacing: -0.01em; margin: 32px 0 12px; }
 .secondary-evidence > section { margin-top: 0; }
 .matches-disclosure { margin-top: 30px; }
 .results-model-quality { margin-top: 30px; }
+.results-ticket-years, .results-ticket-months, .results-ticket-days { display: grid; gap: 10px; }
+.results-ticket-years { margin-top: 28px; }
+.results-ticket-years > details, .results-ticket-months > details, .results-ticket-days > details {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+.results-ticket-years > details > summary, .results-ticket-months > details > summary, .results-ticket-days > details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style-position: inside;
+}
+.results-ticket-years > details > summary:hover, .results-ticket-months > details > summary:hover, .results-ticket-days > details > summary:hover { background: var(--accent-bg); }
+.results-ticket-years > details > summary strong { font-size: 16px; }
+.results-ticket-months > details > summary strong, .results-ticket-days > details > summary strong { font-size: 13px; }
+.results-ticket-years summary small, .results-ticket-months summary small, .results-ticket-days summary small { color: var(--muted); font-size: 11px; }
+.results-ticket-months, .results-ticket-days { padding: 0 10px 10px; }
+.results-ticket-days .ticket-cards { grid-template-columns: 1fr; margin-top: 10px; }
+.ticket-history-item { overflow: hidden; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); }
+.ticket-history-summary { display: grid; grid-template-columns: minmax(150px, 1fr) auto auto auto auto auto; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; list-style-position: inside; color: var(--text2); font-size: 12px; }
+.ticket-history-summary:hover { background: var(--accent-bg); }
+.ticket-history-summary > strong { display: inline-flex; align-items: center; gap: 8px; color: var(--accent); font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+.ticket-history-item.tier-value .ticket-history-summary > strong { color: var(--warning); }
+.ticket-history-item.tier-high .ticket-history-summary > strong { color: var(--negative); }
+.ticket-history-summary .status-badge { min-width: 0; }
+.ticket-history-arrow { color: var(--muted); font-size: 22px; line-height: 1; }
+.ticket-history-item[open] .ticket-history-arrow { transform: rotate(90deg); }
+.ticket-history-item > .premium-ticket { border: 0; border-top: 1px solid var(--border); border-radius: 0; box-shadow: none; }
 .flow-panel { margin: 34px 0 12px; padding: 22px; border: 1px solid var(--border); border-radius: var(--r-xl); background: var(--surface); box-shadow: var(--shadow-sm); }
 .flow-panel h2 { margin: 5px 0 0; font-size: 1.35rem; }
 .flow-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
