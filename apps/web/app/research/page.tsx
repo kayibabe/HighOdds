@@ -89,7 +89,7 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
     orderBy: [{ kickoff: "desc" }, { id: "desc" }], take: 2000, include: highProbabilityFixtureInclude
   });
 
-  const highProbabilityRows = summaryFixtures.flatMap((fixture) => {
+  const marketPickRows = summaryFixtures.flatMap((fixture) => {
     const latestByMarketSelection = new Map<string, (typeof fixture.predictions)[number]>();
     fixture.predictions
       .filter((row) => row.asOfAt < fixture.kickoff && row.modelRun.trainedUntil <= row.asOfAt)
@@ -111,13 +111,16 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
       const pick = rows.reduce((best, row) => Number(row.probability) > Number(best.probability) ? row : best);
       return Number(pick.probability) >= HIGH_PROBABILITY_THRESHOLD ? [{ market, pick }] : [];
     });
-    const strongest = marketPicks.reduce<(typeof marketPicks)[number] | undefined>((best, row) => !best || Number(row.pick.probability) > Number(best.pick.probability) ? row : best, undefined);
-    if (!strongest) return [];
     const finishedScore = fixture.homeGoals !== null && fixture.awayGoals !== null
         ? { home: fixture.homeGoals, away: fixture.awayGoals }
         : null;
-    const outcome = finishedScore ? resolveSelection(strongest.market, strongest.pick.selection, finishedScore.home, finishedScore.away) : null;
-    return [{ fixture, market: strongest.market, pick: strongest.pick, outcome }];
+    return marketPicks.map(({ market, pick }) => ({ fixture, market, pick, outcome: finishedScore ? resolveSelection(market, pick.selection, finishedScore.home, finishedScore.away) : null }));
+  });
+  const marketPicksByFixture = new Map<string, typeof marketPickRows[number][]>();
+  for (const row of marketPickRows) marketPicksByFixture.set(row.fixture.id, [...(marketPicksByFixture.get(row.fixture.id) ?? []), row]);
+  const highProbabilityRows = summaryFixtures.flatMap((fixture) => {
+    const strongest = (marketPicksByFixture.get(fixture.id) ?? []).reduce<(typeof marketPickRows)[number] | undefined>((best, row) => !best || Number(row.pick.probability) > Number(best.pick.probability) ? row : best, undefined);
+    return strongest ? [strongest] : [];
   });
 
   const screenCandidates = screening ? fixtures.flatMap((fixture) => {
@@ -210,15 +213,19 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
     ...(fixtureId ? { fixture: fixtureId } : {}),
     ...(screening ? { screen: "1", market: screenMarket, selection: screenSelection, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), stake: stakePerSelection.toFixed(2), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}), ...(range.preset === "custom" ? { from: range.from!, to: range.to! } : { range: range.preset }) } : {})
   };
-  const summarizeSelectorRows = (rows: typeof highProbabilityRows) => {
+  const summarizePickRows = (rows: typeof marketPickRows) => {
     const settled = rows.filter((row) => row.outcome !== null);
     const won = settled.filter((row) => row.outcome === "WIN").length;
     const lost = settled.filter((row) => row.outcome === "LOSS").length;
     return { selected: rows.length, settled: settled.length, won, lost, hitRate: settled.length > 0 ? won / settled.length : null };
   };
   const selectorSummaryRows = [
-    { market: "ALL", ...summarizeSelectorRows(highProbabilityRows) },
-    ...Array.from(new Set(highProbabilityRows.map((row) => row.market))).sort().map((market) => ({ market, ...summarizeSelectorRows(highProbabilityRows.filter((row) => row.market === market)) }))
+    { market: "ALL", ...summarizePickRows(highProbabilityRows) },
+    ...Array.from(new Set(highProbabilityRows.map((row) => row.market))).sort().map((market) => ({ market, ...summarizePickRows(highProbabilityRows.filter((row) => row.market === market)) }))
+  ];
+  const marketSummaryRows = [
+    { market: "ALL", ...summarizePickRows(marketPickRows) },
+    ...Array.from(new Set(marketPickRows.map((row) => row.market))).sort().map((market) => ({ market, ...summarizePickRows(marketPickRows.filter((row) => row.market === market)) }))
   ];
   const renderHighProbabilityTable = (rows: typeof highProbabilityRows) => <div className="matches-table-wrap"><table className="matches-table"><thead><tr><th>Match</th><th>Kickoff</th><th>Market</th><th>Model outcome</th><th>Probability</th><th>Result</th></tr></thead><tbody>{rows.map(({ fixture, market, pick, outcome }) => <tr key={`${fixture.id}-${market}`}>
     <th scope="row"><Link href={listHref(fixture.id)}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</Link><small>{fixture.competition.name}</small></th>
@@ -264,6 +271,7 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
       <div className="section-heading"><div><p className="eyebrow">HIGH-PROBABILITY MARKET OUTCOMES</p><h2 id="research-high-probability-title">Strongest model picks</h2></div><p className="meta">Markets at or above {pct(HIGH_PROBABILITY_THRESHOLD)} · {rangeLabel(summaryRange)} · result shown only after a final score</p></div>
       <RangeNav basePath="/research" range={summaryRange} today={today} params={summaryNavigationParams} paramNames={{ range: "summaryRange", from: "summaryFrom", to: "summaryTo" }} />
       {highProbabilityRows.length > 0 && <section className="research-selector-summary" aria-labelledby="research-selector-summary-title"><div className="section-heading"><div><p className="eyebrow">MODEL SELECTOR</p><h3 id="research-selector-summary-title">Hit rates</h3></div><p className="meta">Pending picks are excluded from the hit-rate denominator</p></div><div className="matches-table-wrap"><table className="matches-table"><thead><tr><th>Selected market</th><th>Selected</th><th>Settled</th><th>Won</th><th>Lost</th><th>Hit rate</th></tr></thead><tbody>{selectorSummaryRows.map((row) => <tr key={row.market}><th scope="row">{row.market === "ALL" ? "All strongest picks" : marketLabel(row.market)}</th><td className="num">{row.selected}</td><td className="num">{row.settled}</td><td className="num">{row.won}</td><td className="num">{row.lost}</td><td className="num">{row.hitRate === null ? "—" : pct(row.hitRate)}</td></tr>)}</tbody></table></div></section>}
+      {marketPickRows.length > 0 && <section className="research-market-summary" aria-labelledby="research-market-summary-title"><div className="section-heading"><div><p className="eyebrow">MARKET PICKS</p><h3 id="research-market-summary-title">Hit rates</h3></div><p className="meta">Each market is evaluated separately; a fixture may appear once per market</p></div><div className="matches-table-wrap"><table className="matches-table"><thead><tr><th>Market</th><th>Selected</th><th>Settled</th><th>Won</th><th>Lost</th><th>Hit rate</th></tr></thead><tbody>{marketSummaryRows.map((row) => <tr key={row.market}><th scope="row">{row.market === "ALL" ? "All market picks" : marketLabel(row.market)}</th><td className="num">{row.selected}</td><td className="num">{row.settled}</td><td className="num">{row.won}</td><td className="num">{row.lost}</td><td className="num">{row.hitRate === null ? "—" : pct(row.hitRate)}</td></tr>)}</tbody></table></div></section>}
       {highProbabilityRows.length === 0 ? <div className="notice">No high-probability market picks are available for {rangeLabel(summaryRange)}.</div> : <div className="research-high-probability-groups">{Array.from(highProbabilityGroups.entries()).sort(([a], [b]) => b.localeCompare(a)).map(([year, months]) => {
         const yearOpen = Array.from(months.values()).some((days) => days.has(today));
         return <details key={year} open={yearOpen}><summary><strong>{year}</strong><small>{Array.from(months.values()).reduce((count, days) => count + Array.from(days.values()).reduce((dayCount, rows) => dayCount + rows.length, 0), 0)} market picks</small></summary><div className="research-high-probability-months">{Array.from(months.entries()).sort(([a], [b]) => b.localeCompare(a)).map(([month, days]) => {
