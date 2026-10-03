@@ -63,15 +63,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   }
   const legsByFixture = new Map<string, typeof ticketLegs>();
   for (const leg of ticketLegs) legsByFixture.set(leg.fixtureId, [...(legsByFixture.get(leg.fixtureId) ?? []), leg]);
-  const pickCount = fixtures.filter((fixture) => predictionsByFixture.has(fixture.id)).length;
+  const modelPickFixtures = fixtures.flatMap((fixture) => {
+    const pick = strongestPrediction(predictionsByFixture.get(fixture.id) ?? [], fixture.kickoff);
+    return pick ? [{ fixture, pick }] : [];
+  });
 
   return (
     <section>
       <p className="eyebrow">{isToday ? "TODAY'S RESEARCH" : "RESEARCH HISTORY"}</p>
       <h1>Today&apos;s research</h1>
       <DayNav basePath="/dashboard" day={day} today={today} />
-      <p className="page-intro">Published paper tickets first, then the full fixture slate for <strong>{formatDay(day)}</strong>. Nothing appears here on days without a qualifying edge.</p>
-      <p><a className="inline-action" href="#matches-title">View {fixtures.length} matches for {day} (Blantyre time) ↓</a></p>
+      <p className="page-intro">Published paper tickets first, then the model-pick matches for <strong>{formatDay(day)}</strong>. Nothing appears here on days without a qualifying edge.</p>
+      <p><a className="inline-action" href="#matches-title">View {modelPickFixtures.length} model-pick matches for {day} (Blantyre time) ↓</a></p>
 
       {cardData.length === 0 && <div className="notice">{isToday ? "No qualified selections today. Insufficient evidence to publish a paper ticket." : `No paper ticket was published for ${formatDay(day)}.`}</div>}
       <TicketBoard tickets={cardData} />
@@ -82,16 +85,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </details>
 
       <details className="secondary-evidence matches-disclosure">
-        <summary>Show today&apos;s full fixture slate <small>{fixtures.length} fixtures · model pick and ticket status</small></summary>
+        <summary>Show model-pick matches <small>{modelPickFixtures.length} matches · model pick and ticket status</small></summary>
       <section className="matches-section" aria-labelledby="matches-title">
-        <h2 id="matches-title">{isToday ? "Today's matches" : `Matches on ${formatDay(day)}`}</h2>
-        <p>{fixtures.length} fixtures scheduled for {day} in Africa/Blantyre. Times are local. <strong>Model pick</strong> is the model&apos;s most confident pre-kickoff call ({pickCount} of {fixtures.length} matches had a prediction; only competitions with a trained model get one) — a research signal, not a betting selection. <strong>Ticket</strong> shows the selection actually published on a paper ticket.</p>
-        {fixtures.length === 0 ? <div className="notice">{isToday ? "No fixtures have been stored for today yet." : "No fixtures were stored for this day."}</div> : (
+        <h2 id="matches-title">{isToday ? "Today's model-pick matches" : `Model-pick matches on ${formatDay(day)}`}</h2>
+        <p>{modelPickFixtures.length} matches with a model pick for {day} in Africa/Blantyre. Times are local. <strong>Model pick</strong> is the model&apos;s most confident pre-kickoff call — a research signal, not a betting selection. <strong>Ticket</strong> shows the selection actually published on a paper ticket.</p>
+        {modelPickFixtures.length === 0 ? <div className="notice">{isToday ? "No model-pick matches are available for today yet." : "No model-pick matches were recorded for this day."}</div> : (
           <div className="matches-table-wrap">
             <table className="matches-table">
               <thead><tr><th>Time</th><th>Match</th><th>Competition</th><th>Status</th><th>Score</th><th>Model pick</th><th>Ticket</th><th>Last received</th></tr></thead>
-              <tbody>{fixtures.map((fixture) => {
-                const pick = strongestPrediction(predictionsByFixture.get(fixture.id) ?? [], fixture.kickoff);
+              <tbody>{modelPickFixtures.map(({ fixture, pick }) => {
                 const pickOutcome = pick ? legOutcome(pick.marketKey!, pick.selection, fixture) : null;
                 const legs = legsByFixture.get(fixture.id) ?? [];
                 return (
