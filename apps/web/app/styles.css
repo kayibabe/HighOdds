@@ -417,6 +417,15 @@ h2 { font-size: 1.15rem; letter-spacing: -0.01em; margin: 32px 0 12px; }
 .research-candidate-result { display: flex; align-items: center; gap: 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .research-high-probability { display: grid; gap: 12px; margin-top: 24px; }
 .research-high-probability h2 { margin: 3px 0 0; font-size: clamp(1.1rem, 2.5vw, 1.45rem); }
+.research-high-probability-groups { display: grid; gap: 8px; }
+.research-high-probability-groups > details, .research-high-probability-months > details, .research-high-probability-days > details { border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); overflow: hidden; }
+.research-high-probability-groups summary, .research-high-probability-months summary, .research-high-probability-days summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; cursor: pointer; list-style-position: inside; }
+.research-high-probability-groups summary:hover, .research-high-probability-months summary:hover, .research-high-probability-days summary:hover { background: var(--accent-bg); }
+.research-high-probability-groups summary strong { font-size: 15px; }
+.research-high-probability-months, .research-high-probability-days { display: grid; gap: 8px; padding: 0 8px 8px; }
+.research-high-probability-months summary strong, .research-high-probability-days summary strong { font-size: 13px; }
+.research-high-probability-groups summary small, .research-high-probability-months summary small, .research-high-probability-days summary small { color: var(--muted); font-size: 11px; }
+.research-high-probability-days .matches-table-wrap { padding: 0 8px 8px; }
 .research-performance { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .research-performance article { display: grid; gap: 4px; padding: 13px 14px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); }
 .research-performance small { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }

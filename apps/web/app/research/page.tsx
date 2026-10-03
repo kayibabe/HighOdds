@@ -20,6 +20,10 @@ const fixtureInclude = {
   predictions: { orderBy: { asOfAt: "desc" as const }, include: { market: true, modelRun: true } },
   quotes: { orderBy: { capturedAt: "desc" as const }, take: 100, include: { bookmaker: true, market: true } }
 };
+const highProbabilityFixtureInclude = {
+  competition: true, homeTeam: true, awayTeam: true,
+  predictions: { orderBy: { asOfAt: "desc" as const }, include: { market: true, modelRun: true } }
+};
 
 function resultHeadline(fixture: { status: string; statusCode: string | null; elapsedMinute: number | null; homeGoals: number | null; awayGoals: number | null }): string {
   const line = score(fixture);
@@ -42,6 +46,7 @@ function cleanScreenValue(value: string | string[] | undefined, allowed: readonl
 export default async function ResearchPage({ searchParams }: { searchParams: Promise<{
   fixture?: string | string[]; date?: string | string[]; range?: string | string[]; from?: string | string[]; to?: string | string[]; screen?: string | string[]; market?: string | string[];
   selection?: string | string[]; minProbability?: string | string[]; minOdds?: string | string[]; maxQuoteAge?: string | string[]; stake?: string | string[];
+  summaryRange?: string | string[]; summaryFrom?: string | string[]; summaryTo?: string | string[];
 }> }) {
   const params = await searchParams;
   const { fixture: fixtureParam, date } = params;
@@ -58,6 +63,8 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
   const day = parseIsoDay(date);
   const range = resolveDayRange(params, today, "30d");
   const rangeBounds = range.from && range.to ? { start: blantyreDayBounds(range.from).start, end: blantyreDayBounds(range.to).end } : null;
+  const summaryRange = resolveDayRange({ range: params.summaryRange, from: params.summaryFrom, to: params.summaryTo }, today, "30d");
+  const summaryBounds = { start: summaryRange.from ? blantyreDayBounds(summaryRange.from).start : undefined, end: blantyreDayBounds(summaryRange.to ?? today).end };
 
   // Without a date: the upcoming slate (as before). With a date: every researched fixture that day,
   // including ones that only appear on tickets, so past results stay reachable.
@@ -74,7 +81,12 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
     ?? (fixtureId ? await db.fixture.findUnique({ where: { id: fixtureId }, include: fixtureInclude }) : null)
     ?? fixtures[0];
 
-  const highProbabilityRows = fixtures.flatMap((fixture) => {
+  const summaryFixtures = await db.fixture.findMany({
+    where: { kickoff: { ...(summaryBounds.start ? { gte: summaryBounds.start } : {}), lt: summaryBounds.end }, predictions: { some: {} } },
+    orderBy: [{ kickoff: "desc" }, { id: "desc" }], take: 2000, include: highProbabilityFixtureInclude
+  });
+
+  const highProbabilityRows = summaryFixtures.flatMap((fixture) => {
     const latestByMarketSelection = new Map<string, (typeof fixture.predictions)[number]>();
     fixture.predictions
       .filter((row) => row.asOfAt < fixture.kickoff && row.modelRun.trainedUntil <= row.asOfAt)
@@ -163,11 +175,44 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
   const netPerUnit = settledCandidates.reduce((sum, candidate) => sum + candidate.profitUnits!, 0);
   const roi = settledCount > 0 ? netPerUnit / settledCount * 100 : null;
   const filterQuery = screening ? `&screen=1&market=${screenMarket}&selection=${screenSelection}&minProbability=${(minProbability * 100).toFixed(0)}&minOdds=${minOdds}&stake=${stakePerSelection}${maxQuoteAge ? `&maxQuoteAge=${maxQuoteAge}` : ""}${range.preset === "custom" ? `&from=${range.from}&to=${range.to}` : `&range=${range.preset}`}` : "";
-  const listHref = (id: string) => `${day ? `/research?date=${day}` : "/research?fixture=" + id}${day ? `&fixture=${id}` : ""}${filterQuery}`;
+  const summaryQuery = new URLSearchParams(summaryRange.preset === "custom" ? { summaryFrom: summaryRange.from ?? "", summaryTo: summaryRange.to ?? "" } : { summaryRange: summaryRange.preset }).toString();
+  const listHref = (id: string) => `${day ? `/research?date=${day}` : "/research?fixture=" + id}${day ? `&fixture=${id}` : ""}${filterQuery}${summaryQuery ? `&${summaryQuery}` : ""}`;
   const screenHref = (overrides: Record<string, string> = {}) => {
     const values = { ...(range.preset === "custom" ? { from: range.from!, to: range.to! } : { range: range.preset }), screen: "1", market: screenMarket, selection: screenSelection, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), stake: stakePerSelection.toFixed(2), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}), ...overrides };
     return `/research?${new URLSearchParams(Object.entries(values).filter(([, value]) => value !== "")).toString()}`;
   };
+
+  const dateKey = (value: Date) => {
+    const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Blantyre", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
+    const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+    return `${part("year")}-${part("month")}-${part("day")}`;
+  };
+  const highProbabilityGroups = new Map<string, Map<string, Map<string, typeof highProbabilityRows[number][]>>>();
+  for (const row of highProbabilityRows) {
+    const dayKey = dateKey(row.fixture.kickoff);
+    const year = dayKey.slice(0, 4);
+    const month = dayKey.slice(0, 7);
+    const years = highProbabilityGroups.get(year) ?? new Map<string, Map<string, typeof highProbabilityRows[number][]>>();
+    const months = years.get(month) ?? new Map<string, typeof highProbabilityRows[number][]>();
+    const days = months.get(dayKey) ?? [];
+    days.push(row);
+    months.set(dayKey, days);
+    years.set(month, months);
+    highProbabilityGroups.set(year, years);
+  }
+  const summaryNavigationParams = {
+    ...(day ? { date: day } : {}),
+    ...(fixtureId ? { fixture: fixtureId } : {}),
+    ...(screening ? { screen: "1", market: screenMarket, selection: screenSelection, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), stake: stakePerSelection.toFixed(2), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}), ...(range.preset === "custom" ? { from: range.from!, to: range.to! } : { range: range.preset }) } : {})
+  };
+  const renderHighProbabilityTable = (rows: typeof highProbabilityRows) => <div className="matches-table-wrap"><table className="matches-table"><thead><tr><th>Match</th><th>Kickoff</th><th>Market</th><th>Model outcome</th><th>Probability</th><th>Result</th></tr></thead><tbody>{rows.map(({ fixture, market, pick, outcome }) => <tr key={`${fixture.id}-${market}`}>
+    <th scope="row"><Link href={listHref(fixture.id)}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</Link><small>{fixture.competition.name}</small></th>
+    <td>{dateTime(fixture.kickoff)}</td>
+    <td>{label(market)}</td>
+    <td>{label(pick.selection)}</td>
+    <td className="num">{pct(Number(pick.probability))}</td>
+    <td>{outcome ? <span className={`status-badge ${outcome.toLowerCase()}`}>{outcome === "WIN" ? "Won" : "Lost"} · {score(fixture)}</span> : <span className="sr-only">Not played</span>}</td>
+  </tr>)}</tbody></table></div>;
 
   return <section>
     <p className="eyebrow">FIXTURE RESEARCH</p>
@@ -201,15 +246,15 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
       })}</tbody></table></div>}
     </section>}
     <section className="research-high-probability" aria-labelledby="research-high-probability-title">
-      <div className="section-heading"><div><p className="eyebrow">HIGH-PROBABILITY MARKET OUTCOMES</p><h2 id="research-high-probability-title">Strongest model picks</h2></div><p className="meta">Markets at or above {pct(HIGH_PROBABILITY_THRESHOLD)} · result shown only after a final score</p></div>
-      {highProbabilityRows.length === 0 ? <div className="notice">No high-probability market picks are available for this view.</div> : <div className="matches-table-wrap"><table className="matches-table"><thead><tr><th>Match</th><th>Kickoff</th><th>Market</th><th>Model outcome</th><th>Probability</th><th>Result</th></tr></thead><tbody>{highProbabilityRows.map(({ fixture, market, pick, outcome }) => <tr key={`${fixture.id}-${market}`}>
-        <th scope="row"><Link href={listHref(fixture.id)}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</Link><small>{fixture.competition.name}</small></th>
-        <td>{dateTime(fixture.kickoff)}</td>
-        <td>{label(market)}</td>
-        <td>{label(pick.selection)}</td>
-        <td className="num">{pct(Number(pick.probability))}</td>
-        <td>{outcome ? <span className={`status-badge ${outcome.toLowerCase()}`}>{outcome === "WIN" ? "Won" : "Lost"} · {score(fixture)}</span> : <span className="sr-only">Not played</span>}</td>
-      </tr>)}</tbody></table></div>}
+      <div className="section-heading"><div><p className="eyebrow">HIGH-PROBABILITY MARKET OUTCOMES</p><h2 id="research-high-probability-title">Strongest model picks</h2></div><p className="meta">Markets at or above {pct(HIGH_PROBABILITY_THRESHOLD)} · {rangeLabel(summaryRange)} · result shown only after a final score</p></div>
+      <RangeNav basePath="/research" range={summaryRange} today={today} params={summaryNavigationParams} paramNames={{ range: "summaryRange", from: "summaryFrom", to: "summaryTo" }} />
+      {highProbabilityRows.length === 0 ? <div className="notice">No high-probability market picks are available for {rangeLabel(summaryRange)}.</div> : <div className="research-high-probability-groups">{Array.from(highProbabilityGroups.entries()).sort(([a], [b]) => b.localeCompare(a)).map(([year, months]) => {
+        const yearOpen = Array.from(months.values()).some((days) => days.has(today));
+        return <details key={year} open={yearOpen}><summary><strong>{year}</strong><small>{Array.from(months.values()).reduce((count, days) => count + Array.from(days.values()).reduce((dayCount, rows) => dayCount + rows.length, 0), 0)} market picks</small></summary><div className="research-high-probability-months">{Array.from(months.entries()).sort(([a], [b]) => b.localeCompare(a)).map(([month, days]) => {
+          const monthOpen = days.has(today);
+          return <details key={month} open={monthOpen}><summary><strong>{new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "Africa/Blantyre" }).format(new Date(`${month}-01T00:00:00.000Z`))}</strong><small>{Array.from(days.values()).reduce((count, rows) => count + rows.length, 0)} market picks</small></summary><div className="research-high-probability-days">{Array.from(days.entries()).sort(([a], [b]) => b.localeCompare(a)).map(([dayKey, rows]) => <details key={dayKey} open={dayKey === today}><summary><strong>{formatDay(dayKey)}</strong><small>{rows.length} market pick{rows.length === 1 ? "" : "s"}</small></summary>{renderHighProbabilityTable(rows)}</details>)}</div></details>;
+        })}</div></details>;
+      })}</div>}
     </section>
     <p className="meta">{screening ? `Matches with a model forecast or published ticket leg in ${rangeLabel(range)} (Blantyre time).` : day ? `Fixtures on ${formatDay(day)} (Blantyre time) with a model forecast or a published ticket leg.` : "Upcoming and recently started fixtures with a model forecast. Pick a date to review past matches."}</p>
     {fixtures.length === 0 && !selectedFixture ? <div className="notice">{day ? `No researched fixtures on ${formatDay(day)}.` : "No scored fixtures are available yet. Predictions appear after the model and evidence gates pass."}</div> : <div className="research-layout">
