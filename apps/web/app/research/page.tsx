@@ -31,6 +31,7 @@ function resultHeadline(fixture: { status: string; statusCode: string | null; el
   const line = score(fixture);
   if (fixture.status === "FINISHED") return line ? `Full time · ${line}` : "Finished · score not recorded";
   if (fixture.status === "LIVE") return `In play${fixture.elapsedMinute === null ? "" : ` · ${fixture.elapsedMinute}′`}${line ? ` · ${line}` : ""}`;
+  if (line) return `Score recorded · ${line}`;
   if (fixture.status === "POSTPONED") return "Postponed · markets void";
   if (fixture.status === "CANCELLED") return "Cancelled · markets void";
   return "Not started";
@@ -106,15 +107,17 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
       byMarket.set(market, rows);
     }
 
-    return Array.from(byMarket.entries()).flatMap(([market, rows]) => {
+    const marketPicks = Array.from(byMarket.entries()).flatMap(([market, rows]) => {
       const pick = rows.reduce((best, row) => Number(row.probability) > Number(best.probability) ? row : best);
-      if (Number(pick.probability) < HIGH_PROBABILITY_THRESHOLD) return [];
-      const finishedScore = fixture.status === "FINISHED" && fixture.homeGoals !== null && fixture.awayGoals !== null
+      return Number(pick.probability) >= HIGH_PROBABILITY_THRESHOLD ? [{ market, pick }] : [];
+    });
+    const strongest = marketPicks.reduce<(typeof marketPicks)[number] | undefined>((best, row) => !best || Number(row.pick.probability) > Number(best.pick.probability) ? row : best, undefined);
+    if (!strongest) return [];
+    const finishedScore = fixture.homeGoals !== null && fixture.awayGoals !== null
         ? { home: fixture.homeGoals, away: fixture.awayGoals }
         : null;
-      const outcome = finishedScore ? resolveSelection(market, pick.selection, finishedScore.home, finishedScore.away) : null;
-      return [{ fixture, market, pick, outcome }];
-    });
+    const outcome = finishedScore ? resolveSelection(strongest.market, strongest.pick.selection, finishedScore.home, finishedScore.away) : null;
+    return [{ fixture, market: strongest.market, pick: strongest.pick, outcome }];
   });
 
   const screenCandidates = screening ? fixtures.flatMap((fixture) => {
@@ -142,7 +145,7 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
     return groups;
   }, new Map<string, NonNullable<typeof selectedFixture>["predictions"]>());
 
-  const finalScore = selectedFixture?.status === "FINISHED" && selectedFixture.homeGoals !== null && selectedFixture.awayGoals !== null
+  const finalScore = selectedFixture && selectedFixture.homeGoals !== null && selectedFixture.awayGoals !== null
     ? { home: selectedFixture.homeGoals, away: selectedFixture.awayGoals } : null;
   const marketResults = Array.from(probabilityGroups?.entries() ?? []).map(([market, rows]) => {
     const outcomes = rows.map((row) => ({ row, hit: finalScore ? resolveSelection(market, row.selection, finalScore.home, finalScore.away) === "WIN" : null }));
