@@ -110,16 +110,10 @@ export default async function ResultsPage({ searchParams }: { searchParams: Prom
       {tickets.length === 0
         ? <div className="notice">No published paper tickets for {period}.</div>
         : <>
-          <p className="results-tally" aria-label="Tickets by outcome in this period">
-            <span className="status-badge win">{counts.WIN} won</span>
-            <span className="status-badge loss">{counts.LOSS} lost</span>
-            <span className="status-badge void">{counts.VOID} void</span>
-            <span className="status-badge pending">{pendingCount} pending</span>
-          </p>
           <section className="results-ticket-history" aria-labelledby="ticket-history-title">
             <div className="ticket-board-heading">
               <div><p className="eyebrow">TICKET HISTORY</p><h2 id="ticket-history-title">Accumulator tickets</h2></div>
-              <p>Open a year, month, day, and then an accumulator to review its legs and evidence.</p>
+              <p>{counts.WIN} won · {counts.LOSS} lost · {counts.VOID} void · {pendingCount} pending. Open a year, month, day, and then an accumulator to review its legs and evidence.</p>
             </div>
             <div className="results-ticket-years">
               {Array.from(ticketGroups.entries()).sort(([a], [b]) => b.localeCompare(a)).map(([year, months]) => {

@@ -266,7 +266,6 @@ export default function TicketBoard({ tickets, eyebrow = "PRIMARY RESEARCH OUTPU
                 <div className="premium-ticket-tags">
                   {showDate && <span className="selection-chip">{ticket.targetDate}</span>}
                   <span className={`status-badge ${ticket.outcome.toLowerCase()}`}>{ticket.outcome}</span>
-                  <span className="selection-chip">{ticket.legs.length} legs</span>
                   {ticket.relaxed && <span className="selection-chip caution">Relaxed criteria</span>}
                 </div>
               </div>

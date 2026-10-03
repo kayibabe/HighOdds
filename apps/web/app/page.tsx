@@ -9,7 +9,7 @@ export default function Home() {
     <div className="home-principles" aria-labelledby="principles-title">
       <div className="section-heading"><div><p className="eyebrow">HOW TO USE IT</p><h2 id="principles-title">Three screens, three jobs</h2></div><p className="meta">Start with the question you need answered.</p></div>
       <div className="grid">
-        <article><span className="principle-index">01</span><h3>Today</h3><p>See published paper tickets and the current fixture slate.</p><a href="/dashboard">Open today</a></article>
+        <article><span className="principle-index">01</span><h3>Today</h3><p>See published paper tickets and the current fixture slate.</p><a href="/signin">Sign in to open today</a></article>
         <article><span className="principle-index">02</span><h3>Research</h3><p>Inspect one fixture’s probability, captured price, and result evidence.</p><a href="/research">Inspect fixtures</a></article>
         <article><span className="principle-index">03</span><h3>Results</h3><p>Check settled history and whether the model has earned trust over time.</p><a href="/results">Review results</a></article>
       </div>
