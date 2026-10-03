@@ -426,6 +426,16 @@ h2 { font-size: 1.15rem; letter-spacing: -0.01em; margin: 32px 0 12px; }
 .research-high-probability-months summary strong, .research-high-probability-days summary strong { font-size: 13px; }
 .research-high-probability-groups summary small, .research-high-probability-months summary small, .research-high-probability-days summary small { color: var(--muted); font-size: 11px; }
 .research-high-probability-days .matches-table-wrap { padding: 0 8px 8px; }
+.research-high-probability .matches-table { min-width: 1040px; table-layout: fixed; }
+.research-high-probability .matches-table th[scope="row"] { width: 34%; min-width: 300px; color: var(--text); text-align: left; letter-spacing: 0; text-transform: none; background: var(--surface); }
+.research-high-probability .matches-table th[scope="row"] a { color: var(--text); }
+.research-high-probability .matches-table th[scope="row"] small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; font-weight: 400; }
+.research-high-probability .matches-table td { vertical-align: middle; }
+.research-high-probability .matches-table td:nth-child(2) { width: 150px; white-space: nowrap; }
+.research-high-probability .matches-table td:nth-child(3) { width: 170px; }
+.research-high-probability .matches-table td:nth-child(4) { width: 140px; }
+.research-high-probability .matches-table td:nth-child(5) { width: 110px; white-space: nowrap; }
+.research-high-probability .matches-table td:last-child { width: 150px; white-space: nowrap; }
 .research-performance { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .research-performance article { display: grid; gap: 4px; padding: 13px 14px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); }
 .research-performance small { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }

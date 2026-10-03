@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
 const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
 const dateTime = (value: Date) => new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Blantyre", dateStyle: "medium", timeStyle: "short" }).format(value);
 const label = (value: string) => value.replaceAll("_", " ");
+const marketLabel = (value: string) => ({ TOTAL_GOALS: "Total goals", MATCH_WINNER: "Match winner", BTTS: "Both teams score" }[value] ?? label(value));
+const selectionLabel = (value: string) => ({ UNDER_2_5: "Under 2.5", OVER_2_5: "Over 2.5", HOME: "Home", DRAW: "Draw", AWAY: "Away", YES: "Yes", NO: "No" }[value] ?? label(value));
 const score = (fixture: { homeGoals: number | null; awayGoals: number | null }) => fixture.homeGoals !== null && fixture.awayGoals !== null ? `${fixture.homeGoals}–${fixture.awayGoals}` : null;
 const LEG_OUTCOME_LABEL: Record<string, string> = { WIN: "Won", LOSS: "Lost", VOID: "Void", PENDING: "Pending", UNRESOLVED: "Unresolved" };
 const HIGH_PROBABILITY_THRESHOLD = 0.6;
@@ -208,8 +210,8 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
   const renderHighProbabilityTable = (rows: typeof highProbabilityRows) => <div className="matches-table-wrap"><table className="matches-table"><thead><tr><th>Match</th><th>Kickoff</th><th>Market</th><th>Model outcome</th><th>Probability</th><th>Result</th></tr></thead><tbody>{rows.map(({ fixture, market, pick, outcome }) => <tr key={`${fixture.id}-${market}`}>
     <th scope="row"><Link href={listHref(fixture.id)}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</Link><small>{fixture.competition.name}</small></th>
     <td>{dateTime(fixture.kickoff)}</td>
-    <td>{label(market)}</td>
-    <td>{label(pick.selection)}</td>
+    <td>{marketLabel(market)}</td>
+    <td>{selectionLabel(pick.selection)}</td>
     <td className="num">{pct(Number(pick.probability))}</td>
     <td>{outcome ? <span className={`status-badge ${outcome.toLowerCase()}`}>{outcome === "WIN" ? "Won" : "Lost"} · {score(fixture)}</span> : <span className="sr-only">Not played</span>}</td>
   </tr>)}</tbody></table></div>;
