@@ -7,11 +7,11 @@ export default function Home() {
       <div className="hero-actions"><a className="btn-primary" href="/research">Explore research</a><a className="btn-secondary" href="/results">Review results</a></div>
     </div>
     <div className="home-principles" aria-labelledby="principles-title">
-      <div className="section-heading"><div><p className="eyebrow">HOW TO USE IT</p><h2 id="principles-title">Three workspaces, distinct pages</h2></div><p className="meta">Start with the question you need answered.</p></div>
+      <div className="section-heading"><div><p className="eyebrow">HOW TO USE IT</p><h2 id="principles-title">A clear research flow</h2></div><p className="meta">Move from today&apos;s signals to evidence, then outcomes.</p></div>
       <div className="grid">
-        <article><span className="principle-index">01</span><h3>Today</h3><p>Open Daily Research for paper tickets or High Probability Matches for forecasts and calibration.</p><a href="/dashboard/research">Open Daily Research</a></article>
-        <article><span className="principle-index">02</span><h3>Research</h3><p>Inspect a fixture, screen historical evidence, or review model history on separate pages.</p><a href="/research">Inspect fixtures</a></article>
-        <article><span className="principle-index">03</span><h3>Results</h3><p>Check settled history and whether the model has earned trust over time.</p><a href="/results">Review results</a></article>
+        <article><span className="principle-index">01</span><h3>Today</h3><p>Review paper tickets or use Forecast Finder to compare high-probability signals.</p><a href="/dashboard/research">Open today&apos;s tickets</a></article>
+        <article><span className="principle-index">02</span><h3>Investigate</h3><p>Inspect a fixture, screen historical evidence, or review the forecast archive.</p><a href="/research">Inspect fixtures</a></article>
+        <article><span className="principle-index">03</span><h3>Review</h3><p>Check settled returns and whether the model has earned trust over time.</p><a href="/results">Review results</a></article>
       </div>
     </div>
     <details className="home-method"><summary>How evidence moves through HighOdds</summary><div className="flow-steps"><article><span>01</span><h3>Capture</h3><p>Fixtures and bookmaker prices are stored with their received and captured times.</p></article><article><span>02</span><h3>Forecast</h3><p>Walk-forward probabilities are tied to a training cutoff and forecast time.</p></article><article><span>03</span><h3>Publish &amp; settle</h3><p>Only fresh selections are published; results, voids, ROI, and model quality remain reviewable.</p></article></div></details>

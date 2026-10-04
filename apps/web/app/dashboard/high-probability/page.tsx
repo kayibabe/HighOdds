@@ -39,7 +39,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const fixtures = await db.fixture.findMany({
       where: { kickoff: { gte: localDay.start, lt: localDay.end } },
       orderBy: [{ kickoff: "asc" }, { id: "asc" }],
-      select: { id: true, competitionId: true, kickoff: true, status: true, homeGoals: true, awayGoals: true, receivedAt: true, competition: { select: { name: true } }, homeTeam: { select: { name: true } }, awayTeam: { select: { name: true } } }
+      select: { id: true, competitionId: true, kickoff: true, status: true, homeGoals: true, awayGoals: true, competition: { select: { name: true } }, homeTeam: { select: { name: true } }, awayTeam: { select: { name: true } } }
     });
 
   const fixtureIds = fixtures.map((fixture) => fixture.id);
@@ -116,8 +116,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <DayNav basePath="/dashboard/high-probability" day={day} today={today} allowFuture params={{ minProbability: String(minimumPercent), pick: pickFilter.value, stake: simulatorStake.toFixed(2) }} />
       <p className="page-intro">Compare model picks for <strong>{formatDay(day)}</strong> with historical calibration evidence.</p>
 
-      <section className="matches-section" aria-labelledby="matches-title">
-        <h2 id="matches-title">{isToday ? "Today's high-probability matches" : `High-probability matches on ${formatDay(day)}`}</h2>
+      <section className="matches-section" aria-label={isToday ? "Today's high-probability matches" : `High-probability matches on ${formatDay(day)}`}>
         <form className="date-form probability-filter" action="/dashboard/high-probability" method="get">
           <label>Date <input type="date" name="date" defaultValue={day} required /></label>
           <label>Model probability <select name="minProbability" defaultValue={String(minimumPercent)}>{PROBABILITY_THRESHOLDS.map((threshold) => <option key={threshold} value={threshold}>{threshold}% and above</option>)}</select></label>
@@ -125,17 +124,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <ResearchStakeInput initialStake={simulatorStake} />
           <button type="submit" className="date-go">Show matches</button>
         </form>
+        <p className="filter-summary" role="status"><strong>{modelPickFixtures.length}</strong> signals · {pickFilter.label} · {minimumPercent}% and above · one strongest eligible forecast per match.</p>
         <section className="high-probability-simulation" aria-labelledby="simulation-title">
           <div className="section-heading"><div><p className="eyebrow">PAPER SIMULATION</p><h3 id="simulation-title">Returns at captured odds</h3></div><p className="meta">MWK stake per selection</p></div>
           <ResearchPerformanceSummary initialStake={simulatorStake} settledCount={simulatedSettled.length} wins={simulatedWins.length} losses={simulatedLosses} voids={pricedPicks.filter((row) => row.outcome === "VOID").length} pending={pricedPicks.filter((row) => row.outcome === "PENDING").length} returnsPerUnit={simulationReturnsPerUnit} netPerUnit={simulationNetPerUnit} roiPercent={simulatedSettled.length ? simulationNetPerUnit / simulatedSettled.length * 100 : null} />
           <p className="meta">Uses the first local active-bookmaker price captured after each forecast and before kickoff, choosing the configured bookmaker priority. {modelPickFixtures.length - pricedPicks.length} selection{modelPickFixtures.length - pricedPicks.length === 1 ? "" : "s"} without a usable captured price {modelPickFixtures.length - pricedPicks.length === 1 ? "is" : "are"} excluded.</p>
         </section>
         {selectionSummaryTable}
-        <p>{modelPickFixtures.length} matches · {pickFilter.label} · {minimumPercent}% and above. One strongest selection from each match&apos;s latest eligible pre-kickoff forecast batch. The model-pick filter matches that strongest selection. Times are Africa/Blantyre. These are research signals; probability alone does not qualify a paper ticket.</p>
         {modelPickFixtures.length === 0 ? <div className="notice">No matches have {pickFilter.value === "ALL" ? "an eligible model pick" : `${pickFilter.label} as their strongest model pick`} at {minimumPercent}% and above for {formatDay(day)}. Try another model pick, a lower threshold or another date.</div> : (
           <div className="matches-table-wrap">
             <table className="matches-table">
-              <thead><tr><th>Time</th><th>Match</th><th>Competition</th><th>Status</th><th>Score</th><th>Model pick</th><th>Match odds</th><th>Historical evidence</th><th>Ticket</th><th>Last received</th></tr></thead>
+              <thead><tr><th>Time</th><th>Match</th><th>Model pick</th><th>Match odds</th><th>Historical evidence</th><th>Paper ticket</th></tr></thead>
               <tbody>{displayedPicks.map(({ fixture, pick, quote, outcome: pickOutcome }) => {
                 const legs = legsByFixture.get(fixture.id) ?? [];
                 const evidence = forecastEvidence(evidenceRows, { fixtureId: fixture.id, competitionId: fixture.competitionId,
@@ -143,18 +142,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 return (
                   <tr key={fixture.id}>
                     <td>{BLANTYRE_TIME.format(fixture.kickoff)}</td>
-                    <td><a href={`/research?date=${day}&fixture=${fixture.id}`}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</a></td>
-                    <td>{fixture.competition.name}</td>
-                    <td>{fixture.status}</td>
-                    <td>{fixture.homeGoals !== null && fixture.awayGoals !== null ? `${fixture.homeGoals}–${fixture.awayGoals}` : "—"}</td>
+                    <td className="match-summary"><a href={`/research?date=${day}&fixture=${fixture.id}`}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</a><small>{fixture.competition.name} · {fixture.status}{fixture.homeGoals !== null && fixture.awayGoals !== null ? ` · ${fixture.homeGoals}–${fixture.awayGoals}` : ""}</small></td>
                     <td className="match-pick">{pick ? <>
                       <span>{shortPickLabel(pick.marketKey!, pick.selection)} <small>{(pick.probability * 100).toFixed(1)}%</small></span>
                       {pickOutcome && pickOutcome !== "PENDING" && <span className={`status-badge leg-outcome ${pickOutcome.toLowerCase()}`}>{LEG_OUTCOME_LABEL[pickOutcome]}</span>}
                     </> : <span className="match-pick-none">—</span>}</td>
                     <td className="match-odds">{quote ? <><strong>{Number(quote.decimalOdds).toFixed(2)}</strong><small>{quote.bookmaker.name}<br />Captured {BLANTYRE_RECEIVED.format(quote.capturedAt)}</small></> : <span className="match-pick-none">No eligible active-bookmaker price</span>}</td>
                     <td className="match-calibration">
-                      <p>{evidence.observed === null ? "No comparable completed matches." : <>Similar forecasts won <strong>{(evidence.observed * 100).toFixed(1)}%</strong> across <strong>{evidence.matches} matches</strong> ({evidence.wins} wins).</>}</p>
-                      <p className="meta">{evidence.matches === 0 ? "Reliability unknown." : evidence.matches < 30 ? "Small sample: reliability remains uncertain." : "Historical evidence; match outcome remains uncertain."}</p>
+                      <p>{evidence.observed === null ? "No comparable results." : <>Observed <strong>{(evidence.observed * 100).toFixed(1)}%</strong> · <strong>{evidence.matches}</strong> comparisons</>}</p>
+                      <p className="meta">{evidence.matches === 0 ? "Reliability unknown." : evidence.matches < 30 ? "Small sample." : "Historical comparison."}</p>
                       <details><summary>Calibration details</summary>
                         {evidence.interval && <p>95% win-rate interval: {(evidence.interval.lower * 100).toFixed(1)}–{(evidence.interval.upper * 100).toFixed(1)}%. Similar forecasts averaged {(evidence.predicted! * 100).toFixed(1)}%. Observed minus predicted: {((evidence.gap ?? 0) * 100).toFixed(1)} percentage points.</p>}
                         <p>Same competition, market, selection and model method; {(evidence.lower * 100).toFixed(0)}–{(evidence.upper * 100).toFixed(0)}% band (upper boundary excluded except 100%), preceding 180 days. Comparison ends at the forecast: {BLANTYRE_RECEIVED.format(pick.asOfAt)}.</p>
@@ -169,7 +165,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                         {outcome !== "PENDING" && <span className={`status-badge leg-outcome ${outcome.toLowerCase()}`}>{LEG_OUTCOME_LABEL[outcome]}</span>}
                       </span>;
                     })}</td>
-                    <td>{BLANTYRE_RECEIVED.format(fixture.receivedAt)}</td>
                   </tr>
                 );
               })}</tbody>

@@ -9,23 +9,26 @@ import TableSorters from "./sortable-table";
 // Sidebar app shell ported from lohela's frontend (App.tsx): brand + grouped icon nav on the left,
 // slim status header on top, bottom tab bar on phones. Sign-in renders standalone, as in lohela.
 
-type NavItem = { href: string; label: string; icon: IconName; hint: string; children?: NavItem[] };
+type NavItem = { href: string; label: string; icon: IconName; hint: string };
+type NavGroup = { label: string; icon: IconName; children: NavItem[] };
 type IconName = "home" | "sparkles" | "chart" | "shield" | "login" | "search" | "gauge";
 
-const WORKSPACE: NavItem[] = [
-  { href: "/dashboard", label: "Today", icon: "sparkles", hint: "Daily research and model forecasts", children: [
-    { href: "/dashboard/research", label: "Daily Research", icon: "sparkles", hint: "Published paper tickets and supporting signals" },
-    { href: "/dashboard/high-probability", label: "High Probability Matches", icon: "chart", hint: "Filter forecasts with historical calibration evidence" }
+const WORKFLOW: NavGroup[] = [
+  { label: "Today", icon: "sparkles", children: [
+    { href: "/dashboard/research", label: "Today’s Paper Tickets", icon: "sparkles", hint: "Published paper tickets and supporting signals" },
+    { href: "/dashboard/high-probability", label: "Forecast Finder", icon: "chart", hint: "Filter forecasts with historical calibration evidence" }
   ] },
-  { href: "/research", label: "Research", icon: "search", hint: "Inspect fixtures, prices, and model evidence", children: [
+  { label: "Investigate", icon: "search", children: [
     { href: "/research", label: "Fixture Inspector", icon: "search", hint: "Inspect a fixture’s forecasts, prices and result" },
     { href: "/research/screener", label: "Historical Screener", icon: "chart", hint: "Filter historical forecasts and captured prices" },
-    { href: "/research/model-history", label: "Model History", icon: "chart", hint: "Model selection archive and outcome hit rates" }
+    { href: "/research/model-history", label: "Forecast Archive", icon: "chart", hint: "Model selection archive and outcome hit rates" }
   ] },
-  { href: "/results", label: "Results", icon: "chart", hint: "Settled paper history and model quality" }
+  { label: "Review", icon: "chart", children: [
+    { href: "/results", label: "Results & Returns", icon: "chart", hint: "Settled paper history and model quality" }
+  ] }
 ];
 const ADMIN_ITEMS: NavItem[] = [
-  { href: "/analysis", label: "System health", icon: "gauge", hint: "Pipeline health and model diagnostics" },
+  { href: "/analysis", label: "System Health", icon: "gauge", hint: "Pipeline health and model diagnostics" },
   { href: "/admin", label: "Administration", icon: "shield", hint: "Users, providers, and operations" }
 ];
 const SIGN_IN: NavItem = { href: "/signin", label: "Sign in", icon: "login", hint: "Subscriber and admin access" };
@@ -59,12 +62,9 @@ export default function AppShell({ email, isAdmin, children }: Readonly<{ email:
     return <div className="auth-standalone"><div className="auth-theme"><ThemeToggle /></div>{children}</div>;
   }
 
-  const workspace = WORKSPACE.filter((item) => item.href !== "/dashboard" || email);
-  const allItems = [...workspace, ...(isAdmin ? ADMIN_ITEMS : [])];
-  const pages = allItems.flatMap((item) => item.children ?? [item]);
-  const current = pages.find((item) => pathname === item.href);
-  const currentGroup = workspace.find((item) => isActive(pathname, item.href));
-  const mobileItems = email ? allItems : [...allItems, SIGN_IN];
+  const workflow = email ? WORKFLOW : [];
+  const currentGroup = workflow.find((item) => item.children.some((child) => isActive(pathname, child.href)));
+  const mobileItems = email ? [...workflow.map((group) => ({ href: group.children[0]!.href, label: group.label, icon: group.icon, hint: group.label })), ...(isAdmin ? ADMIN_ITEMS : [])] : [SIGN_IN];
 
   const navLink = (item: NavItem, subpage = false) => {
     const active = pathname === item.href;
@@ -86,13 +86,13 @@ export default function AppShell({ email, isAdmin, children }: Readonly<{ email:
           </span>
         </a>
         <nav className="sidebar-nav" aria-label="Primary navigation">
-          <span className="sidebar-label">Decision workspace</span>
-          {workspace.map((item) => item.children ? <div className="nav-group" key={item.href}>
-            <span className={`nav-group-title${isActive(pathname, item.href) ? " active" : ""}`}><NavIcon name={item.icon} />{item.label}</span>
-            <div className="nav-group-pages">{item.children.map((child) => navLink(child, true))}</div>
-          </div> : navLink(item))}
+          <span className="sidebar-label">Research flow</span>
+          {workflow.map((group) => <div className="nav-group" key={group.label}>
+            <span className={`nav-group-title${currentGroup === group ? " active" : ""}`}><NavIcon name={group.icon} />{group.label}</span>
+            <div className="nav-group-pages">{group.children.map((child) => navLink(child, true))}</div>
+          </div>)}
           {isAdmin && <>
-            <span className="sidebar-label sidebar-label-admin">Private tools</span>
+            <span className="sidebar-label sidebar-label-admin">Operations</span>
             {ADMIN_ITEMS.map((item) => navLink(item))}
           </>}
         </nav>
@@ -111,10 +111,9 @@ export default function AppShell({ email, isAdmin, children }: Readonly<{ email:
       <header className="app-header">
         <a className="brand brand-compact" href="/" aria-label="HighOdds home"><BrandMark /></a>
         <div className="main-header-status">
-          <span className="research-status"><span className="status-dot" /> Paper validation</span>
+          <span className="research-status"><span className="status-dot" /> Paper research</span>
           <ThemeToggle />
         </div>
-        {current && <div className="global-page-context"><strong>{current.label}</strong><span>{current.hint}</span></div>}
         <button type="button" className="global-refresh" onClick={() => router.refresh()} title="Refresh current page" aria-label="Refresh current page">↻ <span>Refresh</span></button>
         {email && <form action={signOutAction} className="header-signout"><button type="submit" className="theme-btn">Sign out</button></form>}
       </header>

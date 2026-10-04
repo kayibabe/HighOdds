@@ -241,7 +241,7 @@ export default async function ResearchWorkspace({ searchParams, view }: {
 
   return <section>
     <p className="eyebrow">RESEARCH WORKSPACE</p>
-    <h1>{view === "fixture" ? "Fixture Inspector" : view === "screener" ? "Historical Screener" : "Model History"}</h1>
+    <h1>{view === "fixture" ? "Fixture Inspector" : view === "screener" ? "Historical Screener" : "Forecast Archive"}</h1>
     <p className="page-intro">{view === "fixture" ? "Inspect one fixture from forecast to result: probabilities, captured prices, and settlement evidence." : view === "screener" ? "Compare historical pre-kickoff forecasts and captured prices, with outcomes and paper returns." : "Review the model's highest-probability selections and outcome hit rates over time."} Probabilities are model estimates, not validated edges or betting recommendations.</p>
     {screening ? <RangeNav basePath="/research/screener" range={range} today={today} params={{ screen: "1", market: screenMarket, selection: screenSelection, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), stake: stakePerSelection.toFixed(2), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}) }} /> : view === "fixture" ? <DayNav basePath="/research" day={day} today={today} allowFuture upcomingLabel="Upcoming" /> : null}
     {screening && <section className="research-screener" aria-labelledby="research-screener-title">

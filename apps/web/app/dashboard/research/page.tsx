@@ -24,9 +24,9 @@ export default async function DailyResearchPage({ searchParams }: {
   ]);
   return <section>
     <p className="eyebrow">TODAY · PAPER RESEARCH</p>
-    <h1>Daily Research</h1>
+    <h1>Today&apos;s Paper Tickets</h1>
     <DayNav basePath="/dashboard/research" day={day} today={today} allowFuture />
-    <p className="page-intro">Published paper tickets and supporting model signals for <strong>{formatDay(day)}</strong>. Ticket target dates are UTC days; fixture times are Africa/Blantyre.</p>
+    <p className="page-intro">Published paper tickets for <strong>{formatDay(day)}</strong>. Supporting model signals remain available below; fixture times are Africa/Blantyre.</p>
     {!tickets.length && <div className="notice">No paper ticket was published for {formatDay(day)}. The signals below remain research evidence.</div>}
     <TicketBoard tickets={tickets} />
     <details className="secondary-evidence"><summary>Supporting model signals and rules</summary>
