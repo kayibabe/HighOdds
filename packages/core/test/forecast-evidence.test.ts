@@ -29,9 +29,9 @@ describe("daily high-probability picks", () => {
     ]) expect(highProbabilityPick([invalid], kickoff, now, 60)).toBeNull();
     expect(highProbabilityPick([{ ...pick, asOfAt: kickoff }, { ...pick, trainedUntil: now }], kickoff, kickoff, 60)).toBeNull();
   });
-  it("accepts only supported filter values and defaults to 60", () => {
+  it("accepts only supported filter values and defaults to 65", () => {
     for (const threshold of PROBABILITY_THRESHOLDS) expect(probabilityThreshold(String(threshold))).toBe(threshold);
-    for (const invalid of [undefined, "75", "bad", ["90", "50"]]) expect(probabilityThreshold(invalid)).toBe(60);
+    for (const invalid of [undefined, "50", "60", "bad", ["90", "55"]]) expect(probabilityThreshold(invalid)).toBe(65);
   });
   it("filters the strongest model pick and does not substitute a weaker selection", () => {
     const stronger = { ...pick, marketKey: "BTTS", selection: "YES", probability: 0.85 };
