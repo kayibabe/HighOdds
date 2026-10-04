@@ -9,12 +9,19 @@ import TableSorters from "./sortable-table";
 // Sidebar app shell ported from lohela's frontend (App.tsx): brand + grouped icon nav on the left,
 // slim status header on top, bottom tab bar on phones. Sign-in renders standalone, as in lohela.
 
-type NavItem = { href: string; label: string; icon: IconName; hint: string };
+type NavItem = { href: string; label: string; icon: IconName; hint: string; children?: NavItem[] };
 type IconName = "home" | "sparkles" | "chart" | "shield" | "login" | "search" | "gauge";
 
 const WORKSPACE: NavItem[] = [
-  { href: "/dashboard", label: "Today", icon: "sparkles", hint: "Published paper tickets and today’s slate" },
-  { href: "/research", label: "Research", icon: "search", hint: "Inspect fixtures, prices, and model evidence" },
+  { href: "/dashboard", label: "Today", icon: "sparkles", hint: "Daily research and model forecasts", children: [
+    { href: "/dashboard/research", label: "Daily Research", icon: "sparkles", hint: "Published paper tickets and supporting signals" },
+    { href: "/dashboard/high-probability", label: "High Probability Matches", icon: "chart", hint: "Filter forecasts with historical calibration evidence" }
+  ] },
+  { href: "/research", label: "Research", icon: "search", hint: "Inspect fixtures, prices, and model evidence", children: [
+    { href: "/research", label: "Fixture Inspector", icon: "search", hint: "Inspect a fixture’s forecasts, prices and result" },
+    { href: "/research/screener", label: "Historical Screener", icon: "chart", hint: "Filter historical forecasts and captured prices" },
+    { href: "/research/model-history", label: "Model History", icon: "chart", hint: "Model selection archive and outcome hit rates" }
+  ] },
   { href: "/results", label: "Results", icon: "chart", hint: "Settled paper history and model quality" }
 ];
 const ADMIN_ITEMS: NavItem[] = [
@@ -54,13 +61,15 @@ export default function AppShell({ email, isAdmin, children }: Readonly<{ email:
 
   const workspace = WORKSPACE.filter((item) => item.href !== "/dashboard" || email);
   const allItems = [...workspace, ...(isAdmin ? ADMIN_ITEMS : [])];
-  const current = allItems.find((item) => isActive(pathname, item.href));
+  const pages = allItems.flatMap((item) => item.children ?? [item]);
+  const current = pages.find((item) => pathname === item.href);
+  const currentGroup = workspace.find((item) => isActive(pathname, item.href));
   const mobileItems = email ? allItems : [...allItems, SIGN_IN];
 
-  const navLink = (item: NavItem) => {
-    const active = isActive(pathname, item.href);
+  const navLink = (item: NavItem, subpage = false) => {
+    const active = pathname === item.href;
     return (
-      <a key={item.href} href={item.href} className={`nav-tab${active ? " active" : ""}`} aria-current={active ? "page" : undefined} title={item.hint}>
+      <a key={item.href} href={item.href} className={`nav-tab${subpage ? " nav-subpage" : ""}${active ? " active" : ""}`} aria-current={active ? "page" : undefined} title={item.hint}>
         <span className="nav-icon"><NavIcon name={item.icon} /></span>{item.label}
       </a>
     );
@@ -78,10 +87,13 @@ export default function AppShell({ email, isAdmin, children }: Readonly<{ email:
         </a>
         <nav className="sidebar-nav" aria-label="Primary navigation">
           <span className="sidebar-label">Decision workspace</span>
-          {workspace.map(navLink)}
+          {workspace.map((item) => item.children ? <div className="nav-group" key={item.href}>
+            <span className={`nav-group-title${isActive(pathname, item.href) ? " active" : ""}`}><NavIcon name={item.icon} />{item.label}</span>
+            <div className="nav-group-pages">{item.children.map((child) => navLink(child, true))}</div>
+          </div> : navLink(item))}
           {isAdmin && <>
             <span className="sidebar-label sidebar-label-admin">Private tools</span>
-            {ADMIN_ITEMS.map(navLink)}
+            {ADMIN_ITEMS.map((item) => navLink(item))}
           </>}
         </nav>
         <div className="sidebar-account">
@@ -109,6 +121,9 @@ export default function AppShell({ email, isAdmin, children }: Readonly<{ email:
 
       <main className="main" id="main-content" tabIndex={-1}>
         <TableSorters />
+        {currentGroup?.children && <nav className="mobile-subpages" aria-label={`${currentGroup.label} pages`}>
+          {currentGroup.children.map((item) => <a key={item.href} href={item.href} className={pathname === item.href ? "active" : ""} aria-current={pathname === item.href ? "page" : undefined}>{item.label}</a>)}
+        </nav>}
         {children}
         <footer className="app-footer">18+ · Paper analysis only · No guaranteed outcomes</footer>
       </main>

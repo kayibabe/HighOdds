@@ -161,6 +161,18 @@ main p a:hover { text-decoration: underline; }
 .nav-icon { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; color: currentColor; opacity: 0.8; }
 .nav-tab.active .nav-icon, .nav-tab:hover .nav-icon { opacity: 1; }
 .nav-svg { width: 18px; height: 18px; display: block; stroke: currentColor; }
+.nav-group { margin-bottom: 12px; }
+.nav-group-title { display: flex; align-items: center; gap: 10px; padding: 9px 11px; color: var(--text2); font-size: 13px; font-weight: 800; }
+.nav-group-title.active { color: var(--accent); }
+.nav-group-pages { margin-left: 10px; padding-left: 7px; border-left: 1px solid var(--border); }
+.nav-tab.nav-subpage { font-size: 12px; min-height: 38px; padding: 7px 8px; gap: 7px; line-height: 1.4; }
+.nav-subpage .nav-icon { flex-shrink: 0; width: 16px; }
+.mobile-subpages { display: none; }
+@media (max-width: 760px) {
+  .mobile-subpages { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 20px; }
+  .mobile-subpages a { padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 12px; background: var(--surface); }
+  .mobile-subpages a.active { color: var(--accent); background: var(--accent-bg); border-color: var(--accent); }
+}
 
 .sidebar-account { margin-top: auto; padding: 14px 9px 0; border-top: 1px solid var(--border); }
 .auth-session { display: flex; flex-direction: column; gap: 8px; }
