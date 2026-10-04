@@ -195,11 +195,6 @@ export default async function ResearchWorkspace({ searchParams, view }: {
   const netPerUnit = settledCandidates.reduce((sum, candidate) => sum + candidate.profitUnits!, 0);
   const roi = settledCount > 0 ? netPerUnit / settledCount * 100 : null;
   const listHref = (id: string) => `/research?${new URLSearchParams({ fixture: id, ...(day ? { date: day } : {}) })}`;
-  const screenHref = (overrides: Record<string, string> = {}) => {
-    const values = { ...(range.preset === "custom" ? { from: range.from!, to: range.to! } : { range: range.preset }), screen: "1", pick: modelFilter.value, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), stake: stakePerSelection.toFixed(2), ...(pricedOnly ? { pricedOnly: "1" } : {}), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}), ...overrides };
-    return `/research/screener?${new URLSearchParams(Object.entries(values).filter(([, value]) => value !== "")).toString()}`;
-  };
-
   const dateKey = (value: Date) => {
     const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Blantyre", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
     const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
@@ -263,7 +258,6 @@ export default async function ResearchWorkspace({ searchParams, view }: {
         </div></details>
         <button className="date-go" type="submit">Find candidates</button>
       </form>
-      <div className="research-presets"><span>Historical analysis:</span><Link href={screenHref({ pick: "UNDER_2_5", minProbability: "60", minOdds: "1.8" })}>Last 30 days · Under 2.5 · ≥60% · ≥1.80</Link><Link href={screenHref({ pick: "UNDER_2_5", minProbability: "60", minOdds: "2.1" })}>Last 30 days · Under 2.5 · ≥60% · ≥2.10</Link></div>
     </section>}
     {screening && <section className="research-candidates" aria-labelledby="research-candidates-title"><div className="section-heading"><div><p className="eyebrow">MODEL PICK ANALYSIS · {screenCandidates.length} MATCH{screenCandidates.length === 1 ? "" : "ES"}</p><h2 id="research-candidates-title">{modelFilter.label} · P&amp;L / Net / ROI</h2></div><p className="meta">{rangeLabel(range)} · probability ≥ {pct(minProbability)}{pricedOnly ? " · priced only" : ""} · odds ≥ {minOdds.toFixed(2)}{maxQuoteAge ? ` · quote age ≤ ${maxQuoteAge} min` : ""}</p></div>
       <ResearchPerformanceSummary initialStake={stakePerSelection} settledCount={settledCount} wins={wins} losses={losses} voids={voids} pending={pending} returnsPerUnit={returnsPerUnit} netPerUnit={netPerUnit} roiPercent={roi} />
