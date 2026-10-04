@@ -497,7 +497,10 @@ h2 { font-size: 1.15rem; letter-spacing: -0.01em; margin: 32px 0 12px; }
 .research-detail { min-width: 0; padding: 22px; border: 1px solid var(--border); border-radius: var(--r-xl); background: var(--surface); }
 .research-detail h2 { margin: 7px 0 0; font-size: clamp(1.3rem, 3vw, 1.8rem); }
 .research-detail h3 { margin: 28px 0 12px; font-size: 14px; }
-.research-probabilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.research-probabilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 10px; }
+.research-forecast-evidence { border-top: 1px solid var(--border); padding-top: 10px; font-size: 13px; line-height: 1.5; }
+.research-forecast-evidence p { margin: 0; }
+.research-forecast-evidence summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .research-market { padding: 14px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface2); }
 .research-market > strong { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
 .research-market > div { display: grid; gap: 5px; margin: 10px 0; }

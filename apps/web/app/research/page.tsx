@@ -3,6 +3,7 @@ import { db } from "@highodds/db";
 import { blantyreDayBounds, blantyreToday, displayLegOutcome, parseIsoDay, parseSettlementEvidence, resolveDayRange, resolveSelection } from "@highodds/core";
 import { DayNav, formatDay, RangeNav, rangeLabel } from "../date-nav";
 import { ResearchMoneyCell, ResearchPerformanceSummary, ResearchStakeInput } from "../research-performance";
+import { EVIDENCE_WINDOW_DAYS, forecastEvidence, type EvidenceForecast } from "@highodds/core";
 
 export const dynamic = "force-dynamic";
 
@@ -138,6 +139,7 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
   const selectedFixture = screening && !fixtureId ? screenCandidates[0]?.fixture : selected;
 
   const probabilityGroups = selectedFixture?.predictions.reduce((groups, prediction) => {
+    if (prediction.asOfAt >= selectedFixture.kickoff || prediction.asOfAt > now || prediction.modelRun.trainedUntil > prediction.asOfAt) return groups;
     const key = prediction.market.normalizedKey ?? prediction.market.name;
     const rows = groups.get(key) ?? [];
     if (!rows.some((row) => row.selection === prediction.selection)) rows.push(prediction);
@@ -154,6 +156,24 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
     const brier = finalScore && resolvable ? outcomes.reduce((sum, item) => sum + (Number(item.row.probability) - Number(item.hit)) ** 2, 0) / outcomes.length : null;
     return { market, rows, outcomes, pick, pickHit: pick ? outcomes.find((item) => item.row === pick)?.hit ?? null : null, brier, winner: outcomes.find((item) => item.hit)?.row ?? null };
   });
+
+  const forecastTimes = marketResults.flatMap(({ rows }) => rows.map((row) => row.asOfAt.getTime()));
+  const evidenceEnd = new Date(Math.max(0, ...forecastTimes));
+  const evidenceStart = new Date(Math.min(now.getTime(), ...forecastTimes) - EVIDENCE_WINDOW_DAYS * 86_400_000);
+  const historicalFixtures = selectedFixture && forecastTimes.length ? await db.fixture.findMany({
+    where: { competitionId: selectedFixture.competitionId, id: { not: selectedFixture.id }, status: "FINISHED",
+      kickoff: { gte: evidenceStart, lt: evidenceEnd }, receivedAt: { lt: evidenceEnd },
+      homeGoals: { not: null }, awayGoals: { not: null }, predictions: { some: {} } },
+    include: { predictions: highProbabilityFixtureInclude.predictions }
+  }) : [];
+  const evidenceRows: EvidenceForecast[] = historicalFixtures.flatMap((fixture) => fixture.predictions.flatMap((row) => {
+    const market = row.market.normalizedKey ?? row.market.name;
+    const outcome = resolveSelection(market, row.selection, fixture.homeGoals!, fixture.awayGoals!);
+    if (outcome !== "WIN" && outcome !== "LOSS") return [];
+    return [{ fixtureId: fixture.id, competitionId: fixture.competitionId, market, selection: row.selection,
+      method: row.modelRun.method, probability: Number(row.probability), forecastAt: row.asOfAt,
+      trainedUntil: row.modelRun.trainedUntil, kickoff: fixture.kickoff, resultRecordedAt: fixture.receivedAt, hit: outcome === "WIN" }];
+  }));
 
   const ticketLegs = selectedFixture ? await db.ticketLeg.findMany({
     where: { fixtureId: selectedFixture.id, ticketVersion: { successors: { none: {} } } },
@@ -334,9 +354,21 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
         </>}
 
         <h3>Model probabilities</h3>
+        <p className="meta">Forecasts made before kickoff. Each selection is compared with the same market, selection, competition and model method in its 10 percentage point probability band over the preceding {EVIDENCE_WINDOW_DAYS} days.</p>
         {marketResults.length === 0 ? <p>No model forecast is stored for this fixture.</p> : <div className="research-probabilities">{marketResults.map(({ market, rows, outcomes }) => <div className="research-market" key={market}>
           <strong>{label(market)}</strong>
           <div>{outcomes.map(({ row, hit }) => <span key={`${row.modelRunId}-${row.selection}`} className={hit ? "research-hit" : undefined}><b>{label(row.selection)}{hit ? " ✓" : ""}</b>{pct(Number(row.probability))}</span>)}</div>
+          {outcomes.map(({ row }) => {
+            const evidence = forecastEvidence(evidenceRows, { fixtureId: selectedFixture.id, competitionId: selectedFixture.competitionId,
+              market, selection: row.selection, method: row.modelRun.method, probability: Number(row.probability), forecastAt: row.asOfAt });
+            return <div className="research-forecast-evidence" key={`evidence-${row.selection}`}>
+              <p><b>{selectionLabel(row.selection)}</b>: {pct(Number(row.probability))} predicted probability. {evidence.observed === null
+                ? "No comparable completed matches are available."
+                : <>Similar forecasts historically won {pct(evidence.observed)} of the time across {evidence.matches} matches ({evidence.wins} wins).</>}</p>
+              {evidence.interval && <p className="meta">Historical win-rate range: {pct(evidence.interval.lower)}–{pct(evidence.interval.upper)} (95% interval). Similar forecasts averaged {pct(evidence.predicted!)}; observed minus predicted: {((evidence.gap ?? 0) * 100).toFixed(1)} percentage points. {evidence.matches < 30 ? "Small sample: reliability remains uncertain." : "Historical comparison; this does not establish reliability for this match."}</p>}
+              <details><summary>Comparison evidence</summary><p className="meta">Probability band: {pct(evidence.lower)}–{pct(evidence.upper)} (upper boundary excluded except 100%). One latest eligible forecast per match. Comparison ends at {dateTime(row.asOfAt)}. Only finished matches whose current result record was received before that forecast are included; later refreshed records are excluded conservatively. Matching model methods may include different trained model versions. The interval assumes independent matches; shared teams and model changes can increase uncertainty. <Link href="/analysis#calibration">View market hit rates and selection bias</Link>.</p></details>
+            </div>;
+          })}
           <small>{rows[0] ? `${rows[0].modelRun.method} · trained through ${dateTime(rows[0].modelRun.trainedUntil)} · forecast ${dateTime(rows[0].asOfAt)}` : ""}</small>
         </div>)}</div>}
         <h3>Captured prices</h3>
