@@ -1,6 +1,6 @@
 import { strongestPrediction, type StoredPrediction } from "./settlement.js";
 
-export const PROBABILITY_THRESHOLDS = [55, 65, 75, 85, 95] as const;
+export const PROBABILITY_THRESHOLDS = [40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95] as const;
 export const MODEL_PICK_FILTERS = [
   { value: "ALL", label: "All model picks", market: null, selection: null },
   { value: "OVER_2_5", label: "Over 2.5", market: "TOTAL_GOALS", selection: "OVER_2_5" },
@@ -16,7 +16,7 @@ export function modelPickFilter(value: string | string[] | undefined) {
 }
 export function probabilityThreshold(value: string | string[] | undefined): number {
   const parsed = typeof value === "string" ? Number(value) : NaN;
-  return PROBABILITY_THRESHOLDS.some((threshold) => threshold === parsed) ? parsed : 65;
+  return PROBABILITY_THRESHOLDS.some((threshold) => threshold === parsed) ? parsed : 90;
 }
 
 /** Preserve the newest eligible batch rather than selecting an older, more optimistic forecast. */
