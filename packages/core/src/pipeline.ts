@@ -11,6 +11,7 @@ export const DAILY_JOB_SCHEDULE = [
   { jobType: "INGEST_FIXTURES", utcTime: "00:05" },
   { jobType: "TRAIN_MODEL", utcTime: "05:00" },
   { jobType: "INGEST_ODDS", utcTime: "05:30" },
+  { jobType: "VERIFY_ODDS_COVERAGE", utcTime: "05:45" },
   { jobType: "PUBLISH_TICKETS", utcTime: "06:00" },
   { jobType: "SETTLE_RESULTS", utcTime: "21:00" }
 ] as const;

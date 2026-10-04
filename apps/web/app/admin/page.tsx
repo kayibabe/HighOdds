@@ -6,6 +6,11 @@ import { extendSubscriber, retrainNow, retryJob, toggleAdminRole, toggleBookmake
 export const dynamic = "force-dynamic";
 
 function fmt(date: Date | null | undefined): string { return date ? date.toISOString().replace("T", " ").slice(0, 16) : "—"; }
+function coverage(job: { jobType: string; payload: unknown }): string {
+  if (job.jobType !== "VERIFY_ODDS_COVERAGE" || !job.payload || typeof job.payload !== "object") return "—";
+  const value = job.payload as Record<string, unknown>;
+  return typeof value.checked === "number" && typeof value.remaining === "number" ? `${value.checked} checked; ${value.remaining} missing` : "—";
+}
 
 export default async function AdminPage() {
   const session = await auth();
@@ -62,7 +67,7 @@ export default async function AdminPage() {
       <h2>Jobs &amp; quota</h2>
       <p>Today&apos;s API-Football usage: {quota ? `${quota.requestCount} requests (plan quota ${quota.quotaLimit}/day, shared key)` : "No requests yet today"}</p>
       <table>
-        <thead><tr><th>Type</th><th>Status</th><th>Attempts</th><th>Run after</th><th>Last error</th><th></th></tr></thead>
+        <thead><tr><th>Type</th><th>Status</th><th>Attempts</th><th>Run after</th><th>Coverage</th><th>Last error</th><th></th></tr></thead>
         <tbody>
           {jobs.map((job) => (
             <tr key={job.id}>
@@ -70,6 +75,7 @@ export default async function AdminPage() {
               <td>{job.status}</td>
               <td>{job.attempts}</td>
               <td>{fmt(job.runAfter)}</td>
+              <td>{coverage(job)}</td>
               <td>{job.lastError ?? "—"}</td>
               <td>{job.status !== "DONE" && job.status !== "RUNNING" && <form action={retryJob}><input type="hidden" name="jobId" value={job.id} /><button type="submit">Retry now</button></form>}</td>
             </tr>

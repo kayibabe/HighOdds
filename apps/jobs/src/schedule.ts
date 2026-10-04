@@ -37,7 +37,9 @@ export async function claimDueJobs(now: Date, limit = 10): Promise<ClaimedJob[]>
   });
 }
 
-export async function completeJob(id: string): Promise<void> { await db.jobRun.update({ where: { id }, data: { status: "DONE", completedAt: new Date(), leaseExpiresAt: null } }); }
+export async function completeJob(id: string, payload?: Record<string, number>): Promise<void> {
+  await db.jobRun.update({ where: { id }, data: { status: "DONE", completedAt: new Date(), leaseExpiresAt: null, ...(payload ? { payload: payload as object } : {}) } });
+}
 export async function failAndReleaseJob(id: string, error: unknown, retryAfterMs = RETRY_MS): Promise<void> {
   await db.jobRun.update({ where: { id }, data: { status: "DUE", runAfter: new Date(Date.now() + retryAfterMs), leaseExpiresAt: null, lastError: error instanceof Error ? error.message.slice(0, 2_000) : String(error).slice(0, 2_000) } });
 }

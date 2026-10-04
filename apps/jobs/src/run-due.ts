@@ -1,5 +1,6 @@
 import { ApiFootballClient } from "./api-football.js";
 import { ingestFixtures, ingestOdds } from "./ingestion.js";
+import { captureOddsCoverage } from "./odds-coverage.js";
 import { claimDueJobs, completeJob, ensureDailyJobs, failAndReleaseJob, requeueExpiredLeases } from "./schedule.js";
 import { NoTrainingDataError, assertTrainedAny, trainModel } from "./train.js";
 import { publishTickets } from "./publish.js";
@@ -10,7 +11,7 @@ const EXECUTION_TIMEOUT_MS = 4 * 60 * 1000;
 const NO_TRAINING_DATA_RETRY_MS = 60 * 60 * 1000;
 const deadline = Date.now() + EXECUTION_TIMEOUT_MS;
 
-async function execute(job: { jobType: string }): Promise<void> {
+async function execute(job: { jobType: string }): Promise<Record<string, number> | undefined> {
   const client = new ApiFootballClient();
   const date = new Date().toISOString().slice(0, 10);
   switch (job.jobType) {
@@ -23,6 +24,11 @@ async function execute(job: { jobType: string }): Promise<void> {
       const odds = await client.getPaged("/odds", { date });
       await ingestOdds(odds);
       return;
+    }
+    case "VERIFY_ODDS_COVERAGE": {
+      const result = await captureOddsCoverage(new Date(), client);
+      console.log(`VERIFY_ODDS_COVERAGE forecasts=${result.forecasts} checked=${result.checked} retried=${result.retried} captured=${result.captured} remaining=${result.remaining}`);
+      return { ...result };
     }
     case "TRAIN_MODEL": {
       const result = await trainModel(new Date());
@@ -59,8 +65,8 @@ async function main(): Promise<void> {
       continue;
     }
     try {
-      await execute(job);
-      await completeJob(job.id);
+      const result = await execute(job);
+      await completeJob(job.id, result);
     } catch (error) {
       console.error(`${job.jobType} failed:`, error instanceof Error ? error.message : error);
       await failAndReleaseJob(job.id, error, error instanceof NoTrainingDataError ? NO_TRAINING_DATA_RETRY_MS : undefined);
