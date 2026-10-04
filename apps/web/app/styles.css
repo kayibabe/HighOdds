@@ -697,9 +697,19 @@ table button[type="submit"]:hover { border-color: var(--accent); color: var(--ac
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.status-badge.win { border-color: color-mix(in srgb, var(--positive) 36%, var(--border)); background: color-mix(in srgb, var(--positive) 11%, var(--surface)); color: var(--positive); }
-.status-badge.loss { border-color: color-mix(in srgb, var(--negative) 36%, var(--border)); background: color-mix(in srgb, var(--negative) 9%, var(--surface)); color: var(--negative); }
-.status-badge.void { border-color: color-mix(in srgb, var(--warning) 36%, var(--border)); background: color-mix(in srgb, var(--warning) 9%, var(--surface)); color: var(--warning); }
+.status-badge.win { border-color: #86efac; background: #ecfdf5; color: #047857; }
+.status-badge.loss { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
+.status-badge.void { border-color: #f5c078; background: #fffbeb; color: #b45309; }
+
+@media (prefers-color-scheme: dark) {
+  .status-badge.win { border-color: #34d399; background: #064e3b; color: #a7f3d0; }
+  .status-badge.loss { border-color: #f87171; background: #7f1d1d; color: #fecaca; }
+  .status-badge.void { border-color: #fbbf24; background: #78350f; color: #fde68a; }
+}
+
+:root[data-theme="dark"] .status-badge.win { border-color: #34d399; background: #064e3b; color: #a7f3d0; }
+:root[data-theme="dark"] .status-badge.loss { border-color: #f87171; background: #7f1d1d; color: #fecaca; }
+:root[data-theme="dark"] .status-badge.void { border-color: #fbbf24; background: #78350f; color: #fde68a; }
 
 .status-badge.pending, .status-badge.unresolved { border-color: var(--border2); background: var(--surface2); color: var(--text2); }
 .results-tally { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
