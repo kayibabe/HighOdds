@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { forecastEvidence, highProbabilityPick, historicalSweetSpot, modelPickFilter, MODEL_PICK_FILTERS, probabilityThreshold, PROBABILITY_THRESHOLDS, type EvidenceForecast } from "../src/forecast-evidence.js";
+import { forecastEvidence, highProbabilityPick, historicalScreenerSweetSpot, historicalSweetSpot, modelPickFilter, MODEL_PICK_FILTERS, probabilityThreshold, PROBABILITY_THRESHOLDS, type EvidenceForecast } from "../src/forecast-evidence.js";
 
 const target = { fixtureId: "target", competitionId: "league", market: "TOTAL_GOALS", selection: "OVER_2_5",
   method: "poisson", probability: 0.75, forecastAt: new Date("2026-10-01") };
@@ -51,6 +51,16 @@ describe("daily high-probability picks", () => {
 });
 
 describe("forecast evidence", () => {
+  it("selects a range sweet spot using odds and quote age", () => {
+    const rows = Array.from({ length: 30 }, (_, index) => ({ marketKey: "BTTS", selection: "YES", probability: 0.6, win: index < 21, quotes: [{ odds: 1.8, quoteAgeMinutes: 120 }] }));
+    const result = historicalScreenerSweetSpot(rows);
+    expect(result?.marketKey).toBe("BTTS");
+    expect(result?.selection).toBe("YES");
+    expect(result?.matches).toBe(30);
+    expect(result?.wins).toBe(21);
+    expect(result?.paperRoi).toBeCloseTo(0.26);
+  });
+
   it("selects a conservative sweet spot while ignoring tiny cohorts", () => {
     const rows = [
       ...Array.from({ length: 48 }, (_, index) => ({ marketKey: "MATCH_WINNER", selection: "HOME", probability: 0.8, win: index < 40 })),

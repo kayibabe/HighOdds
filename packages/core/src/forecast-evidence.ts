@@ -121,3 +121,58 @@ export function historicalSweetSpot(rows: HistoricalSweetSpotRow[], minimumSampl
   }
   return candidates.sort((a, b) => b.interval.lower - a.interval.lower || b.hitRate - a.hitRate || b.threshold - a.threshold || b.matches - a.matches)[0] ?? null;
 }
+
+export interface ScreenerQuoteObservation {
+  odds: number;
+  quoteAgeMinutes: number;
+}
+
+export interface HistoricalScreenerRow {
+  marketKey: string;
+  selection: string;
+  probability: number;
+  win: boolean;
+  quotes: ScreenerQuoteObservation[];
+}
+
+export interface HistoricalScreenerSweetSpot {
+  marketKey: string;
+  selection: string;
+  probabilityThreshold: number;
+  minimumOdds: number;
+  maximumQuoteAgeMinutes: number | null;
+  matches: number;
+  wins: number;
+  hitRate: number;
+  paperRoi: number;
+  intervalLower: number;
+}
+
+/** Finds a range-specific screener combination with a meaningful sample and conservative support. */
+export function historicalScreenerSweetSpot(rows: HistoricalScreenerRow[], minimumSample = 30): HistoricalScreenerSweetSpot | null {
+  const probabilityThresholds = [40, 50, 55, 60, 65, 70, 75, 80, 85, 90];
+  const minimumOdds = [1.5, 1.8, 2, 2.2];
+  const maximumQuoteAges: Array<number | null> = [null, 360];
+  const candidates: HistoricalScreenerSweetSpot[] = [];
+  for (const key of new Set(rows.map((row) => `${row.marketKey}\u0000${row.selection}`))) {
+    const [marketKey, selection] = key.split("\u0000");
+    for (const probabilityThreshold of probabilityThresholds) for (const oddsFloor of minimumOdds) for (const maximumQuoteAgeMinutes of maximumQuoteAges) {
+      const priced = rows.flatMap((row) => {
+        if (row.marketKey !== marketKey || row.selection !== selection || row.probability < probabilityThreshold / 100) return [];
+        const eligible = row.quotes.filter((quote) => quote.odds >= oddsFloor && (maximumQuoteAgeMinutes === null || quote.quoteAgeMinutes <= maximumQuoteAgeMinutes));
+        if (eligible.length === 0) return [];
+        return [{ row, odds: Math.max(...eligible.map((quote) => quote.odds)) }];
+      });
+      if (priced.length < minimumSample) continue;
+      const wins = priced.filter(({ row }) => row.win).length;
+      const hitRate = wins / priced.length;
+      const paperRoi = priced.reduce((sum, { row, odds }) => sum + (row.win ? odds - 1 : -1), 0) / priced.length;
+      const z = 1.96;
+      const denominator = 1 + z * z / priced.length;
+      const centre = (hitRate + z * z / (2 * priced.length)) / denominator;
+      const margin = z * Math.sqrt(hitRate * (1 - hitRate) / priced.length + z * z / (4 * priced.length * priced.length)) / denominator;
+      candidates.push({ marketKey, selection, probabilityThreshold, minimumOdds: oddsFloor, maximumQuoteAgeMinutes, matches: priced.length, wins, hitRate, paperRoi, intervalLower: centre - margin });
+    }
+  }
+  return candidates.sort((a, b) => b.intervalLower - a.intervalLower || b.paperRoi - a.paperRoi || b.matches - a.matches)[0] ?? null;
+}

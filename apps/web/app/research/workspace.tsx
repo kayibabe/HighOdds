@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@highodds/db";
-import { blantyreDayBounds, blantyreToday, displayLegOutcome, highProbabilityPick, MODEL_PICK_FILTERS, modelPickFilter, parseIsoDay, parseSettlementEvidence, PROBABILITY_THRESHOLDS, resolveDayRange, resolveSelection, type StoredPrediction } from "@highodds/core";
+import { blantyreDayBounds, blantyreToday, displayLegOutcome, highProbabilityPick, historicalScreenerSweetSpot, MODEL_PICK_FILTERS, modelPickFilter, parseIsoDay, parseSettlementEvidence, PROBABILITY_THRESHOLDS, resolveDayRange, resolveSelection, type StoredPrediction } from "@highodds/core";
 import { DayNav, formatDay, RangeNav, rangeLabel } from "../date-nav";
 import { ResearchMoneyCell, ResearchPerformanceSummary, ResearchStakeInput } from "../research-performance";
 import { EVIDENCE_WINDOW_DAYS, forecastEvidence } from "@highodds/core";
@@ -87,7 +87,7 @@ export default async function ResearchWorkspace({ searchParams, view }: {
       : day
       ? { kickoff: { gte: blantyreDayBounds(day).start, lt: blantyreDayBounds(day).end }, OR: [{ predictions: { some: {} } }, { ticketLegs: { some: {} } }] }
       : { kickoff: { gte: new Date(now.getTime() - 12 * 60 * 60 * 1000) }, predictions: { some: {} } },
-    orderBy: [{ kickoff: "asc" }, { id: "asc" }], take: screening ? 500 : day ? 200 : 80,
+    orderBy: [{ kickoff: "asc" }, { id: "asc" }], ...(screening ? {} : { take: day ? 200 : 80 }),
     include: fixtureInclude
   }) : [];
   const selected = view === "fixture" ? fixtures.find((fixture) => fixture.id === fixtureId)
@@ -144,6 +144,21 @@ export default async function ResearchWorkspace({ searchParams, view }: {
     if (quote && Number(quote.decimalOdds) < minOdds) return [];
     return [{ fixture, marketKey: pick.marketKey!, selection: pick.selection, probability: pick.probability, odds: quote ? Number(quote.decimalOdds) : null, bookmaker: quote?.bookmaker.name ?? null, quoteCapturedAt: quote?.capturedAt ?? null, predictionAsOfAt: pick.asOfAt, trainedUntil: pick.trainedUntil }];
   }) : [];
+  const sweetSpotRows = screening ? fixtures.flatMap((fixture) => {
+    if (fixture.homeGoals === null || fixture.awayGoals === null) return [];
+    const pick = highProbabilityPick(fixture.predictions.map((row) => ({
+      marketKey: row.market.normalizedKey ?? row.market.name, selection: row.selection, probability: Number(row.probability),
+      asOfAt: row.asOfAt, trainedUntil: row.modelRun.trainedUntil
+    } satisfies StoredPrediction & { trainedUntil: Date })), fixture.kickoff, now, 0);
+    if (!pick) return [];
+    const outcome = resolveSelection(pick.marketKey!, pick.selection, fixture.homeGoals, fixture.awayGoals);
+    if (outcome === null) return [];
+    const quotes = fixture.quotes.filter((quote) => quote.bookmaker.active && quote.capturedAt < fixture.kickoff
+      && (quote.market.normalizedKey ?? quote.market.name) === pick.marketKey && quote.selection === pick.selection)
+      .map((quote) => ({ odds: Number(quote.decimalOdds), quoteAgeMinutes: (fixture.kickoff.getTime() - quote.capturedAt.getTime()) / 60_000 }));
+    return [{ marketKey: pick.marketKey!, selection: pick.selection, probability: pick.probability, win: outcome === "WIN", quotes }];
+  }) : [];
+  const screenerSweetSpot = historicalScreenerSweetSpot(sweetSpotRows);
 
   const selectedFixture = selected;
 
@@ -258,6 +273,7 @@ export default async function ResearchWorkspace({ searchParams, view }: {
         </div></details>
         <button className="date-go" type="submit">Find candidates</button>
       </form>
+      <p className="forecast-sweet-spot" role="status"><strong>{screenerSweetSpot ? `Sweet spot for ${rangeLabel(range)}: ${marketLabel(screenerSweetSpot.marketKey)} · ${selectionLabel(screenerSweetSpot.selection)} · ${screenerSweetSpot.probabilityThreshold}%+ probability · odds ≥ ${screenerSweetSpot.minimumOdds.toFixed(2)}${screenerSweetSpot.maximumQuoteAgeMinutes === null ? "" : ` · quote age ≤ ${screenerSweetSpot.maximumQuoteAgeMinutes} min`} — ${screenerSweetSpot.wins}/${screenerSweetSpot.matches} wins (${(screenerSweetSpot.hitRate * 100).toFixed(1)}% hit rate) · ${(screenerSweetSpot.paperRoi * 100 >= 0 ? "+" : "")}${(screenerSweetSpot.paperRoi * 100).toFixed(1)}% paper ROI.` : `Sweet spot for ${rangeLabel(range)}: not enough priced settled candidates yet.`}</strong> <span>Recalculated from the selected range as new settled results and quotes arrive. This is paper evidence, not a staking recommendation.</span></p>
     </section>}
     {screening && <section className="research-candidates" aria-labelledby="research-candidates-title"><div className="section-heading"><div><p className="eyebrow">MODEL PICK ANALYSIS · {screenCandidates.length} MATCH{screenCandidates.length === 1 ? "" : "ES"}</p><h2 id="research-candidates-title">{modelFilter.label} · P&amp;L / Net / ROI</h2></div><p className="meta">{rangeLabel(range)} · probability ≥ {pct(minProbability)}{pricedOnly ? " · priced only" : ""} · odds ≥ {minOdds.toFixed(2)}{maxQuoteAge ? ` · quote age ≤ ${maxQuoteAge} min` : ""}</p></div>
       <ResearchPerformanceSummary initialStake={stakePerSelection} settledCount={settledCount} wins={wins} losses={losses} voids={voids} pending={pending} returnsPerUnit={returnsPerUnit} netPerUnit={netPerUnit} roiPercent={roi} />
