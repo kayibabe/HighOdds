@@ -8,6 +8,7 @@ import { DayNav, formatDay } from "../../date-nav";
 import { MODEL_PICK_FILTERS, modelPickFilter } from "@highodds/core";
 import { ResearchPerformanceSummary, ResearchStakeInput } from "../../research-performance";
 import { resolveResearchQuote } from "../../../lib/research-odds";
+import { ForecastFilterSelect, ForecastPricedOnly } from "../../forecast-filters";
 
 export const dynamic = "force-dynamic";
 
@@ -121,12 +122,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
       <section className="matches-section" aria-label={isToday ? "Today's high-probability matches" : `High-probability matches on ${formatDay(day)}`}>
         <form className="date-form probability-filter" action="/dashboard/high-probability" method="get">
-          <label>Date <input type="date" name="date" defaultValue={day} required /></label>
-          <label>Model probability <select name="minProbability" defaultValue={String(minimumPercent)}>{PROBABILITY_THRESHOLDS.map((threshold) => <option key={threshold} value={threshold}>{threshold}% and above</option>)}</select></label>
-          <label>Model pick <select name="pick" defaultValue={pickFilter.value}>{MODEL_PICK_FILTERS.map((filter) => <option key={filter.value} value={filter.value}>{filter.label}</option>)}</select></label>
-          <label className="inline-checkbox"><input type="checkbox" name="pricedOnly" value="1" defaultChecked={pricedOnly} /> Priced only</label>
+          <input type="hidden" name="date" value={day} />
+          <ForecastFilterSelect name="minProbability" value={String(minimumPercent)} label="Model probability" options={PROBABILITY_THRESHOLDS.map((threshold) => ({ value: threshold, label: `${threshold}% and above` }))} />
+          <ForecastFilterSelect name="pick" value={pickFilter.value} label="Model pick" options={MODEL_PICK_FILTERS.map((filter) => ({ value: filter.value, label: filter.label }))} />
+          <ForecastPricedOnly checked={pricedOnly} />
           <ResearchStakeInput initialStake={simulatorStake} />
-          <button type="submit" className="date-go">Show matches</button>
         </form>
         <p className="filter-summary" role="status"><strong>{visiblePicks.length}</strong> {pricedOnly ? "priced signals" : "signals"} · {pickFilter.label} · {minimumPercent}% and above · {pricedPicks.length} of {modelPickFixtures.length} have an eligible active-bookmaker quote.</p>
         <section className="high-probability-simulation" aria-labelledby="simulation-title">
