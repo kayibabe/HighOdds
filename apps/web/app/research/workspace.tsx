@@ -281,7 +281,7 @@ export default async function ResearchWorkspace({ searchParams, view }: {
         const fixture = candidate.fixture;
         const scoreText = score(fixture);
         const outcomeLabel = candidate.result === "VOID" ? "Void" : candidate.result === "WIN" ? "Won" : candidate.result === "LOSS" ? "Lost" : "Pending";
-        const outcomeClass = outcomeLabel.toLowerCase();
+        const outcomeClass = candidate.result.toLowerCase();
         return <tr key={fixture.id}><th scope="row"><Link href={listHref(fixture.id)}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</Link><small>{fixture.competition.name} · {label(candidate.marketKey)} · {label(candidate.selection)}</small></th><td>{dateTime(fixture.kickoff)}</td><td className="num">{pct(candidate.probability)}</td><td className="num">{candidate.odds === null ? "—" : candidate.odds.toFixed(2)}</td><td>{candidate.bookmaker ?? "No eligible quote"}</td><td className="research-candidate-result">{scoreText ?? "—"}<span className={`status-badge ${outcomeClass}`}>{outcomeLabel}</span></td><ResearchMoneyCell initialStake={stakePerSelection} profitUnits={candidate.profitUnits} /><td><small>Forecast {dateTime(candidate.predictionAsOfAt)}<br />{candidate.quoteCapturedAt ? `Quote ${dateTime(candidate.quoteCapturedAt)}` : "No captured quote"}</small></td></tr>;
       })}</tbody></table></div>}
     </section>}
