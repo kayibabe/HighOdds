@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FixtureCalendar } from "../fixture-calendar";
 import { db } from "@highodds/db";
 import { blantyreDayBounds, blantyreToday, displayLegOutcome, highProbabilityPick, historicalScreenerSweetSpot, MODEL_PICK_FILTERS, modelPickFilter, parseIsoDay, parseSettlementEvidence, PROBABILITY_THRESHOLDS, resolveDayRange, resolveSelection, type StoredPrediction } from "@highodds/core";
 import { DayNav, formatDay, RangeNav, rangeLabel } from "../date-nav";
@@ -73,21 +74,21 @@ export default async function ResearchWorkspace({ searchParams, view }: {
   const pricedOnly = params.pricedOnly === "1" || params.pricedOnly === "on";
   const now = new Date();
   const today = blantyreToday(now);
-  const day = parseIsoDay(date);
+  const day = parseIsoDay(date) ?? (view === "fixture" ? today : null);
   const range = resolveDayRange(params, today, "30d");
   const rangeBounds = range.from && range.to ? { start: blantyreDayBounds(range.from).start, end: blantyreDayBounds(range.to).end } : null;
   const summaryRange = resolveDayRange({ range: params.summaryRange, from: params.summaryFrom, to: params.summaryTo }, today, "30d");
   const summaryBounds = { start: summaryRange.from ? blantyreDayBounds(summaryRange.from).start : undefined, end: blantyreDayBounds(summaryRange.to ?? today).end };
 
-  // Without a date: the upcoming slate (as before). With a date: every researched fixture that day,
-  // including ones that only appear on tickets, so past results stay reachable.
+  // Inspector includes every pulled fixture, even before a forecast exists. Historical
+  // screeners keep their evidence-only universe for retrospective performance.
   const fixtures = view !== "history" ? await db.fixture.findMany({
     where: screening
       ? { ...(rangeBounds ? { kickoff: { gte: rangeBounds.start, lt: rangeBounds.end } } : {}), OR: [{ predictions: { some: {} } }, { ticketLegs: { some: {} } }] }
       : day
-      ? { kickoff: { gte: blantyreDayBounds(day).start, lt: blantyreDayBounds(day).end }, OR: [{ predictions: { some: {} } }, { ticketLegs: { some: {} } }] }
+      ? { kickoff: { gte: blantyreDayBounds(day).start, lt: blantyreDayBounds(day).end } }
       : { kickoff: { gte: new Date(now.getTime() - 12 * 60 * 60 * 1000) }, predictions: { some: {} } },
-    orderBy: [{ kickoff: "asc" }, { id: "asc" }], ...(screening ? {} : { take: day ? 200 : 80 }),
+    orderBy: [{ kickoff: "asc" }, { id: "asc" }],
     include: fixtureInclude
   }) : [];
   const selected = view === "fixture" ? fixtures.find((fixture) => fixture.id === fixtureId)
@@ -257,7 +258,7 @@ export default async function ResearchWorkspace({ searchParams, view }: {
     <p className="eyebrow">RESEARCH WORKSPACE</p>
     <h1>{view === "fixture" ? "Fixture Inspector" : view === "screener" ? "Historical Screener" : "Forecast Archive"}</h1>
     <p className="page-intro">{view === "fixture" ? "Inspect one fixture from forecast to result: probabilities, captured prices, and settlement evidence." : view === "screener" ? "Compare historical pre-kickoff forecasts and captured prices, with outcomes and paper returns." : "Review the model's highest-probability selections and outcome hit rates over time."} Probabilities are model estimates, not validated edges or betting recommendations.</p>
-    {screening ? <RangeNav basePath="/research/screener" range={range} today={today} params={{ screen: "1", pick: modelFilter.value, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), stake: stakePerSelection.toFixed(2), ...(pricedOnly ? { pricedOnly: "1" } : {}), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}) }} /> : view === "fixture" ? <DayNav basePath="/research" day={day} today={today} allowFuture upcomingLabel="Upcoming" /> : null}
+    {screening ? <RangeNav basePath="/research/screener" range={range} today={today} params={{ screen: "1", pick: modelFilter.value, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), stake: stakePerSelection.toFixed(2), ...(pricedOnly ? { pricedOnly: "1" } : {}), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}) }} /> : view === "fixture" ? <><FixtureCalendar now={now} basePath="/research" selectedDay={day} /><DayNav basePath="/research" day={day} today={today} allowFuture /></> : null}
     {screening && <section className="research-screener" aria-labelledby="research-screener-title">
       <div><p className="eyebrow">RESEARCH SCREENER</p><h2 id="research-screener-title">Find model-picked candidates</h2><p className="meta">Choose the model probability and selection first. Add pricing filters when you need executable-quote analysis; results include settled P&amp;L, net, and ROI.</p></div>
       <form className="research-filter-form" action="/research/screener" method="get">
@@ -297,9 +298,9 @@ export default async function ResearchWorkspace({ searchParams, view }: {
       })}</div>}
     </section>}
     {view === "fixture" && <>
-    <p className="meta">{screening ? `Matches with a model forecast or published ticket leg in ${rangeLabel(range)} (Blantyre time).` : day ? `Fixtures on ${formatDay(day)} (Blantyre time) with a model forecast or a published ticket leg.` : "Upcoming and recently started fixtures with a model forecast. Pick a date to review past matches."}</p>
-    {fixtures.length === 0 && !selectedFixture ? <div className="notice">{day ? `No researched fixtures on ${formatDay(day)}.` : "No scored fixtures are available yet. Predictions appear after the model and evidence gates pass."}</div> : <div className="research-layout">
-      <nav className="research-fixtures" aria-label="Scored fixtures">
+    <p className="meta">{screening ? `Matches with a model forecast or published ticket leg in ${rangeLabel(range)} (Blantyre time).` : `All ${fixtures.length} pulled fixtures on ${formatDay(day ?? today)} (Malawi time), including matches awaiting a forecast.`}</p>
+    {fixtures.length === 0 && !selectedFixture ? <div className="notice">No pulled fixtures for this date. Check calendar refresh coverage above before treating this as an empty schedule.</div> : <div className="research-layout">
+      <nav className="research-fixtures" aria-label="Pulled fixtures">
         {fixtures.length === 0 && <p className="meta">No other researched fixtures for this view.</p>}
         {fixtures.map((fixture) => <Link key={fixture.id} href={listHref(fixture.id)} className={`research-fixture${fixture.id === selectedFixture?.id ? " active" : ""}`}>
           <small>{dateTime(fixture.kickoff)} · {fixture.competition.name}</small><strong>{fixture.homeTeam.name} <span>vs</span> {fixture.awayTeam.name}</strong><small>{fixture.status}{score(fixture) ? ` · ${score(fixture)}` : ""}</small>

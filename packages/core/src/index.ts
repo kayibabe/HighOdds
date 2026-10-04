@@ -7,5 +7,6 @@ export * from "./metrics.js";
 export * from "./settlement.js";
 export * from "./dates.js";
 export * from "./pipeline.js";
+export * from "./fixture-calendar.js";
 export * from "./analysis.js";
 export * from "./forecast-evidence.js";

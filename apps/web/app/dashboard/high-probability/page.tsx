@@ -5,6 +5,7 @@ import { blantyreDayBounds, blantyreToday, forecastEvidence, highProbabilityPick
 import { LEG_OUTCOME_LABEL, selectionLabel, shortPickLabel } from "../../../lib/selection";
 import { loadForecastEvidence } from "../../../lib/forecast-evidence";
 import { DayNav, formatDay } from "../../date-nav";
+import { FixtureCalendar } from "../../fixture-calendar";
 import { MODEL_PICK_FILTERS, modelPickFilter } from "@highodds/core";
 import { ResearchPerformanceSummary, ResearchStakeInput } from "../../research-performance";
 import { resolveResearchQuote } from "../../../lib/research-odds";
@@ -149,10 +150,22 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <section>
-      <p className="eyebrow">TODAY · MODEL FORECASTS</p>
+      <p className="eyebrow">MATCH CALENDAR · MODEL FORECASTS</p>
       <h1>High Probability Matches</h1>
+      <FixtureCalendar now={now} basePath="/dashboard/high-probability" selectedDay={day} params={{ minProbability: String(minimumPercent), pick: pickFilter.value, stake: simulatorStake.toFixed(2), ...(pricedOnly ? { pricedOnly: "1" } : {}) }} />
       <DayNav basePath="/dashboard/high-probability" day={day} today={today} allowFuture params={{ minProbability: String(minimumPercent), pick: pickFilter.value, stake: simulatorStake.toFixed(2), ...(pricedOnly ? { pricedOnly: "1" } : {}) }} />
       <p className="page-intro">Compare model picks for <strong>{formatDay(day)}</strong> with historical calibration evidence.</p>
+      <details open={visiblePicks.length === 0}>
+        <summary>All {fixtures.length} pulled matches on {formatDay(day)}</summary>
+        {fixtures.length === 0 ? <p>No pulled matches for this date. Calendar refresh coverage is shown above.</p> : <div className="matches-table-wrap"><table className="matches-table">
+          <thead><tr><th>Time</th><th>Match</th><th>Status</th><th>Forecast</th></tr></thead>
+          <tbody>{fixtures.map((fixture) => <tr key={fixture.id}>
+            <td>{BLANTYRE_TIME.format(fixture.kickoff)}</td>
+            <th scope="row"><a href={`/research?date=${day}&fixture=${fixture.id}`}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</a><small>{fixture.competition.name}</small></th>
+            <td>{fixture.status}</td><td>{predictionsByFixture.has(fixture.id) ? "Forecast stored · inspect match" : fixture.kickoff > now ? "Forecast pending" : "No forecast stored"}</td>
+          </tr>)}</tbody>
+        </table></div>}
+      </details>
       <p className="forecast-sweet-spot" role="status"><strong>{sweetSpot ? `Historical sweet spot: ${shortPickLabel(sweetSpot.marketKey, sweetSpot.selection)} at ${sweetSpot.threshold}%+ model probability — ${sweetSpot.wins}/${sweetSpot.matches} settled wins (${(sweetSpot.hitRate * 100).toFixed(1)}% hit rate).` : "Historical sweet spot: not enough settled results yet."}</strong> <span>Based on settled matches through {formatDay(historicalThroughDay)}; this is paper evidence, not a staking recommendation.</span></p>
 
       <section className="matches-section" aria-label={isToday ? "Today's high-probability matches" : `High-probability matches on ${formatDay(day)}`}>

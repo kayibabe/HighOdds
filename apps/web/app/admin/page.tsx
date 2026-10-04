@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { db } from "@highodds/db";
 import { auth } from "../../auth";
+import { FixtureCalendar } from "../fixture-calendar";
 import { extendSubscriber, retrainNow, retryJob, toggleAdminRole, toggleBookmakerActive } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +66,7 @@ export default async function AdminPage() {
       </table>
 
       <h2>Jobs &amp; quota</h2>
+      <FixtureCalendar now={new Date()} basePath="/research" />
       <p>Today&apos;s API-Football usage: {quota ? `${quota.requestCount} requests (plan quota ${quota.quotaLimit}/day, shared key)` : "No requests yet today"}</p>
       <table>
         <thead><tr><th>Type</th><th>Status</th><th>Attempts</th><th>Run after</th><th>Coverage</th><th>Last error</th><th></th></tr></thead>

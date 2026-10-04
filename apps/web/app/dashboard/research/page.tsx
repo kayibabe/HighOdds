@@ -5,6 +5,7 @@ import { loadTicketCards } from "../../../lib/tickets";
 import { loadTotalGoalsRuleDay } from "../../../lib/total-goals";
 import { loadDailyModelPicks } from "../../../lib/analysis";
 import { DayNav, formatDay } from "../../date-nav";
+import { FixtureCalendar } from "../../fixture-calendar";
 import TicketBoard from "../ticket-board";
 import TotalGoalsRule from "../total-goals-rule";
 import ModelPicks from "../model-picks";
@@ -17,7 +18,8 @@ export default async function DailyResearchPage({ searchParams }: {
   const session = await auth();
   if (!session?.user?.email) redirect("/signin");
   const { date } = await searchParams;
-  const today = blantyreToday(new Date());
+  const now = new Date();
+  const today = blantyreToday(now);
   const day = parseIsoDay(date) ?? today;
   const [tickets, rule, picks] = await Promise.all([
     loadTicketCards({ targetDate: utcDate(day) }), loadTotalGoalsRuleDay(day), loadDailyModelPicks(day)
@@ -29,6 +31,9 @@ export default async function DailyResearchPage({ searchParams }: {
     <p className="page-intro">Published paper tickets for <strong>{formatDay(day)}</strong>. Supporting model signals remain available below; fixture times are Africa/Blantyre.</p>
     {!tickets.length && <div className="notice">No paper ticket was published for {formatDay(day)}. The signals below remain research evidence.</div>}
     <TicketBoard tickets={tickets} />
+    <details className="secondary-evidence"><summary>Upcoming match calendar</summary>
+      <FixtureCalendar now={now} basePath="/dashboard/high-probability" selectedDay={day} />
+    </details>
     <details className="secondary-evidence"><summary>Supporting model signals and rules</summary>
       <TotalGoalsRule data={rule} /><ModelPicks day={day} picks={picks} />
     </details>

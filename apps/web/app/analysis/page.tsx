@@ -8,6 +8,7 @@ import {
 import { auth } from "../../auth";
 import { loadCalibration, loadModelCoverage, loadModelPicks, loadPipelineHealth, loadTicketPerformance, loadUpcomingFunnel } from "../../lib/analysis";
 import { RangeNav, rangeLabel } from "../date-nav";
+import { FixtureCalendar } from "../fixture-calendar";
 
 export const dynamic = "force-dynamic";
 
@@ -200,6 +201,7 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
 
       <RangeNav basePath="/analysis" range={range} today={today} />
       <p className="meta">Performance period: <strong>{period}</strong>. The period applies to calibration and ticket performance; parameters, pipeline health, the funnel and model coverage always show the current state.</p>
+      <FixtureCalendar now={now} basePath="/research" />
 
       <div className="analysis-kpis" aria-label="Headline figures">
         <article><small>Modelled competitions</small><strong>{count(model.competitions)}</strong><span>{model.stale > 0 ? `${count(model.stale)} older than ${model.staleBeforeHours}h` : "All trained recently"}</span></article>

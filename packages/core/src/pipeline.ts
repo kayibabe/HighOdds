@@ -6,6 +6,9 @@
 /** Predictions and tickets only consider fixtures kicking off within this many hours of the run. */
 export const SELECTION_WINDOW_HOURS = 20;
 
+/** Fixture discovery covers today and the following six Africa/Blantyre calendar days. */
+export const FIXTURE_LOOKAHEAD_DAYS = 7;
+
 /** Daily jobs, created idempotently per UTC day. 06:00 UTC is 08:00 Africa/Blantyre. */
 export const DAILY_JOB_SCHEDULE = [
   { jobType: "INGEST_FIXTURES", utcTime: "00:05" },

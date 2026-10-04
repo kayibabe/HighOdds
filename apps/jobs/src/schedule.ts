@@ -1,5 +1,5 @@
 import { db } from "@highodds/db";
-import { DAILY_JOB_SCHEDULE, JOB_LEASE_MINUTES, JOB_RETRY_MINUTES } from "@highodds/core";
+import { DAILY_JOB_SCHEDULE, fixtureCalendar, JOB_LEASE_MINUTES, JOB_RETRY_MINUTES } from "@highodds/core";
 
 const RETRY_MS = JOB_RETRY_MINUTES * 60 * 1000;
 const LEASE_MS = JOB_LEASE_MINUTES * 60 * 1000;
@@ -12,6 +12,16 @@ export async function ensureDailyJobs(now: Date): Promise<void> {
   const jobs = DAILY_JOB_SCHEDULE.map((job) => ({ jobType: job.jobType, runAfter: new Date(`${targetDate}T${job.utcTime}:00.000Z`) }));
   for (const job of jobs) {
     await db.jobRun.upsert({ where: { idempotencyKey: `${job.jobType}:${targetDate}` }, create: { idempotencyKey: `${job.jobType}:${targetDate}`, jobType: job.jobType, runAfter: job.runAfter }, update: {} });
+  }
+  // Separate jobs keep partial progress and retry only the failed date. Refresh every day;
+  // historical backfill's permanent snapshot skip would miss reschedules and cancellations.
+  for (const date of fixtureCalendar(now).providerDates) {
+    if (date === targetDate) continue; // The existing daily job owns today's UTC date.
+    await db.jobRun.upsert({
+      where: { idempotencyKey: `INGEST_FIXTURES:calendar-v1:${targetDate}:${date}` },
+      create: { idempotencyKey: `INGEST_FIXTURES:calendar-v1:${targetDate}:${date}`, jobType: "INGEST_FIXTURES", runAfter: new Date(`${targetDate}T00:05:00Z`), payload: { fixtureDate: date } },
+      update: {}
+    });
   }
 }
 
@@ -37,7 +47,7 @@ export async function claimDueJobs(now: Date, limit = 10): Promise<ClaimedJob[]>
   });
 }
 
-export async function completeJob(id: string, payload?: Record<string, number>): Promise<void> {
+export async function completeJob(id: string, payload?: Record<string, number | string>): Promise<void> {
   await db.jobRun.update({ where: { id }, data: { status: "DONE", completedAt: new Date(), leaseExpiresAt: null, ...(payload ? { payload: payload as object } : {}) } });
 }
 export async function failAndReleaseJob(id: string, error: unknown, retryAfterMs = RETRY_MS): Promise<void> {

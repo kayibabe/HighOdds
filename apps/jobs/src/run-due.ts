@@ -1,4 +1,5 @@
 import { ApiFootballClient } from "./api-football.js";
+import { parseIsoDay, providerDates, SELECTION_WINDOW_HOURS } from "@highodds/core";
 import { ingestFixtures, ingestOdds } from "./ingestion.js";
 import { captureOddsCoverage } from "./odds-coverage.js";
 import { claimDueJobs, completeJob, ensureDailyJobs, failAndReleaseJob, requeueExpiredLeases } from "./schedule.js";
@@ -11,19 +12,27 @@ const EXECUTION_TIMEOUT_MS = 4 * 60 * 1000;
 const NO_TRAINING_DATA_RETRY_MS = 60 * 60 * 1000;
 const deadline = Date.now() + EXECUTION_TIMEOUT_MS;
 
-async function execute(job: { jobType: string }): Promise<Record<string, number> | undefined> {
+async function execute(job: { jobType: string; idempotencyKey: string; payload?: unknown }): Promise<Record<string, number | string> | undefined> {
   const client = new ApiFootballClient();
   const date = new Date().toISOString().slice(0, 10);
   switch (job.jobType) {
     case "INGEST_FIXTURES": {
-      const fixtures = await client.getPaged("/fixtures", { date });
-      await ingestFixtures(fixtures);
-      return;
+      const requestedDate = job.payload && typeof job.payload === "object" && "fixtureDate" in job.payload
+        ? parseIsoDay(job.payload.fixtureDate) : parseIsoDay(job.idempotencyKey.split(":").at(-1)) ?? date;
+      if (!requestedDate) throw new Error("Invalid fixture ingestion date");
+      const fixtures = await client.getPaged("/fixtures", { date: requestedDate });
+      const result = await ingestFixtures(fixtures);
+      console.log(`INGEST_FIXTURES date=${requestedDate} ingested=${result.ingested} rejected=${result.rejected}`);
+      return { fixtureDate: requestedDate, ...result };
     }
     case "INGEST_ODDS": {
-      const odds = await client.getPaged("/odds", { date });
-      await ingestOdds(odds);
-      return;
+      const now = new Date();
+      let quotes = 0; let rejected = 0;
+      for (const oddsDate of providerDates(now, new Date(now.getTime() + SELECTION_WINDOW_HOURS * 3_600_000))) {
+        const result = await ingestOdds(await client.getPaged("/odds", { date: oddsDate }));
+        quotes += result.quotes; rejected += result.rejected;
+      }
+      return { quotes, rejected };
     }
     case "VERIFY_ODDS_COVERAGE": {
       const result = await captureOddsCoverage(new Date(), client);
