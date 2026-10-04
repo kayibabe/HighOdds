@@ -38,10 +38,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const day = parseIsoDay(date) ?? today;
   const isToday = day === today;
   const localDay = blantyreDayBounds(day);
-  const historicalCutoff = blantyreDayBounds(today).start;
+  const historicalThroughDate = new Date(`${day}T00:00:00.000Z`);
+  historicalThroughDate.setUTCDate(historicalThroughDate.getUTCDate() - 1);
+  const historicalThroughDay = historicalThroughDate.toISOString().slice(0, 10);
+  const historicalCutoff = localDay.start;
 
-  // Historical context is intentionally cut off at today's local midnight: only settled
-  // matches through yesterday can influence the recommendation shown above today's filters.
+  // Historical context is cut off at the selected day's local midnight: only settled
+  // matches through the preceding day can influence the recommendation.
   const historicalRows = await db.$queryRaw<Array<{
     fixtureId: string; marketKey: string; selection: string; probability: number; asOfAt: Date;
     trainedUntil: Date; kickoff: Date; status: string; homeGoals: number; awayGoals: number;
@@ -150,7 +153,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <h1>High Probability Matches</h1>
       <DayNav basePath="/dashboard/high-probability" day={day} today={today} allowFuture params={{ minProbability: String(minimumPercent), pick: pickFilter.value, stake: simulatorStake.toFixed(2), ...(pricedOnly ? { pricedOnly: "1" } : {}) }} />
       <p className="page-intro">Compare model picks for <strong>{formatDay(day)}</strong> with historical calibration evidence.</p>
-      <p className="forecast-sweet-spot" role="status"><strong>{sweetSpot ? `Historical sweet spot: ${shortPickLabel(sweetSpot.marketKey, sweetSpot.selection)} at ${sweetSpot.threshold}%+ model probability — ${sweetSpot.wins}/${sweetSpot.matches} settled wins (${(sweetSpot.hitRate * 100).toFixed(1)}% hit rate).` : "Historical sweet spot: not enough settled results yet."}</strong> <span>Based on settled matches through yesterday; this is paper evidence, not a staking recommendation.</span></p>
+      <p className="forecast-sweet-spot" role="status"><strong>{sweetSpot ? `Historical sweet spot: ${shortPickLabel(sweetSpot.marketKey, sweetSpot.selection)} at ${sweetSpot.threshold}%+ model probability — ${sweetSpot.wins}/${sweetSpot.matches} settled wins (${(sweetSpot.hitRate * 100).toFixed(1)}% hit rate).` : "Historical sweet spot: not enough settled results yet."}</strong> <span>Based on settled matches through {formatDay(historicalThroughDay)}; this is paper evidence, not a staking recommendation.</span></p>
 
       <section className="matches-section" aria-label={isToday ? "Today's high-probability matches" : `High-probability matches on ${formatDay(day)}`}>
         <form className="date-form probability-filter" action="/dashboard/high-probability" method="get">
