@@ -3,7 +3,8 @@ import { db } from "@highodds/db";
 import { blantyreDayBounds, blantyreToday, displayLegOutcome, parseIsoDay, parseSettlementEvidence, resolveDayRange, resolveSelection } from "@highodds/core";
 import { DayNav, formatDay, RangeNav, rangeLabel } from "../date-nav";
 import { ResearchMoneyCell, ResearchPerformanceSummary, ResearchStakeInput } from "../research-performance";
-import { EVIDENCE_WINDOW_DAYS, forecastEvidence, type EvidenceForecast } from "@highodds/core";
+import { EVIDENCE_WINDOW_DAYS, forecastEvidence } from "@highodds/core";
+import { loadForecastEvidence } from "../../lib/forecast-evidence";
 
 export const dynamic = "force-dynamic";
 
@@ -157,23 +158,9 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
     return { market, rows, outcomes, pick, pickHit: pick ? outcomes.find((item) => item.row === pick)?.hit ?? null : null, brier, winner: outcomes.find((item) => item.hit)?.row ?? null };
   });
 
-  const forecastTimes = marketResults.flatMap(({ rows }) => rows.map((row) => row.asOfAt.getTime()));
-  const evidenceEnd = new Date(Math.max(0, ...forecastTimes));
-  const evidenceStart = new Date(Math.min(now.getTime(), ...forecastTimes) - EVIDENCE_WINDOW_DAYS * 86_400_000);
-  const historicalFixtures = selectedFixture && forecastTimes.length ? await db.fixture.findMany({
-    where: { competitionId: selectedFixture.competitionId, id: { not: selectedFixture.id }, status: "FINISHED",
-      kickoff: { gte: evidenceStart, lt: evidenceEnd }, receivedAt: { lt: evidenceEnd },
-      homeGoals: { not: null }, awayGoals: { not: null }, predictions: { some: {} } },
-    include: { predictions: highProbabilityFixtureInclude.predictions }
-  }) : [];
-  const evidenceRows: EvidenceForecast[] = historicalFixtures.flatMap((fixture) => fixture.predictions.flatMap((row) => {
-    const market = row.market.normalizedKey ?? row.market.name;
-    const outcome = resolveSelection(market, row.selection, fixture.homeGoals!, fixture.awayGoals!);
-    if (outcome !== "WIN" && outcome !== "LOSS") return [];
-    return [{ fixtureId: fixture.id, competitionId: fixture.competitionId, market, selection: row.selection,
-      method: row.modelRun.method, probability: Number(row.probability), forecastAt: row.asOfAt,
-      trainedUntil: row.modelRun.trainedUntil, kickoff: fixture.kickoff, resultRecordedAt: fixture.receivedAt, hit: outcome === "WIN" }];
-  }));
+  const evidenceRows = await loadForecastEvidence(selectedFixture ? marketResults.flatMap(({ rows }) => rows.map((row) => ({
+    fixtureId: selectedFixture.id, competitionId: selectedFixture.competitionId, forecastAt: row.asOfAt
+  }))) : []);
 
   const ticketLegs = selectedFixture ? await db.ticketLeg.findMany({
     where: { fixtureId: selectedFixture.id, ticketVersion: { successors: { none: {} } } },

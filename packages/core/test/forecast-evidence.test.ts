@@ -1,10 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { forecastEvidence, type EvidenceForecast } from "../src/forecast-evidence.js";
+import { forecastEvidence, highProbabilityPick, probabilityThreshold, PROBABILITY_THRESHOLDS, type EvidenceForecast } from "../src/forecast-evidence.js";
 
 const target = { fixtureId: "target", competitionId: "league", market: "TOTAL_GOALS", selection: "OVER_2_5",
   method: "poisson", probability: 0.75, forecastAt: new Date("2026-10-01") };
 const row: EvidenceForecast = { ...target, fixtureId: "past", probability: 0.72, forecastAt: new Date("2026-09-01"),
   trainedUntil: new Date("2026-08-31"), kickoff: new Date("2026-09-02"), resultRecordedAt: new Date("2026-09-03"), hit: true };
+
+describe("daily high-probability picks", () => {
+  const kickoff = new Date("2026-10-04T18:00:00Z");
+  const now = new Date("2026-10-04T12:00:00Z");
+  const pick = { marketKey: "TOTAL_GOALS", selection: "OVER_2_5", probability: 0.7,
+    asOfAt: new Date("2026-10-04T10:00:00Z"), trainedUntil: new Date("2026-10-03"), method: "poisson" };
+  it.each(PROBABILITY_THRESHOLDS)("includes exactly %s percent and excludes values below the threshold", (threshold) => {
+    const boundary = { ...pick, probability: threshold / 100 };
+    expect(highProbabilityPick([boundary], kickoff, now, threshold)).toBe(boundary);
+    expect(highProbabilityPick([{ ...boundary, probability: boundary.probability - 0.001 }], kickoff, now, threshold)).toBeNull();
+  });
+  it("uses the latest eligible batch and preserves method metadata", () => {
+    const earlier = { ...pick, probability: 0.95, asOfAt: new Date("2026-10-04T08:00:00Z") };
+    expect(highProbabilityPick([earlier, pick], kickoff, now, 80)).toBeNull();
+    expect(highProbabilityPick([earlier, pick], kickoff, now, 60)).toBe(pick);
+  });
+  it("rejects future, kickoff-time, look-ahead and invalid forecasts", () => {
+    for (const invalid of [
+      { ...pick, asOfAt: new Date("2026-10-04T13:00:00Z") }, { ...pick, asOfAt: kickoff },
+      { ...pick, trainedUntil: now }, { ...pick, probability: NaN },
+      { ...pick, probability: 1.1 }, { ...pick, marketKey: null }
+    ]) expect(highProbabilityPick([invalid], kickoff, now, 60)).toBeNull();
+    expect(highProbabilityPick([{ ...pick, asOfAt: kickoff }, { ...pick, trainedUntil: now }], kickoff, kickoff, 60)).toBeNull();
+  });
+  it("accepts only supported filter values and defaults to 60", () => {
+    for (const threshold of PROBABILITY_THRESHOLDS) expect(probabilityThreshold(String(threshold))).toBe(threshold);
+    for (const invalid of [undefined, "75", "bad", ["90", "50"]]) expect(probabilityThreshold(invalid)).toBe(60);
+  });
+});
 
 describe("forecast evidence", () => {
   it("compares same selection and band, reporting wins, forecast mean and uncertainty", () => {

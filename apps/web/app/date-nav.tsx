@@ -18,10 +18,11 @@ function href(basePath: string, params: Record<string, string | null | undefined
 }
 
 /** Single-day picker: previous/next day, a calendar input, and quick jumps back in time. */
-export function DayNav({ basePath, day, today, allowFuture = false, upcomingLabel }: {
+export function DayNav({ basePath, day, today, allowFuture = false, upcomingLabel, params = {} }: {
   basePath: string; day: string | null; today: string; allowFuture?: boolean;
   /** When set, the page has a non-dated default view (e.g. "Upcoming") that this link returns to. */
   upcomingLabel?: string;
+  params?: Record<string, string>;
 }) {
   const current = day ?? today;
   const next = addDays(current, 1);
@@ -34,22 +35,23 @@ export function DayNav({ basePath, day, today, allowFuture = false, upcomingLabe
   return (
     <nav className="date-nav" aria-label="Choose a date">
       <div className="date-nav-row">
-        <Link className="date-step" href={href(basePath, { date: addDays(current, -1) })} aria-label={`Previous day, ${formatDay(addDays(current, -1))}`}>‹</Link>
+        <Link className="date-step" href={href(basePath, { ...params, date: addDays(current, -1) })} aria-label={`Previous day, ${formatDay(addDays(current, -1))}`}>‹</Link>
         <form className="date-form" action={basePath} method="get">
+          {Object.entries(params).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />)}
           <label className="sr-only" htmlFor={`${basePath}-date`}>Date</label>
           <input id={`${basePath}-date`} type="date" name="date" defaultValue={current} max={allowFuture ? undefined : today} required />
           <button type="submit" className="date-go">Go</button>
         </form>
         {allowFuture || next <= today
-          ? <Link className="date-step" href={href(basePath, { date: next })} aria-label={`Next day, ${formatDay(next)}`}>›</Link>
+          ? <Link className="date-step" href={href(basePath, { ...params, date: next })} aria-label={`Next day, ${formatDay(next)}`}>›</Link>
           : <span className="date-step disabled" aria-hidden="true">›</span>}
         {upcomingLabel
-          ? <Link className={`date-chip${day === null ? " active" : ""}`} href={basePath} aria-current={day === null ? "page" : undefined}>{upcomingLabel}</Link>
-          : <Link className={`date-chip${current === today ? " active" : ""}`} href={basePath} aria-current={current === today ? "page" : undefined}>Today</Link>}
+          ? <Link className={`date-chip${day === null ? " active" : ""}`} href={href(basePath, params)} aria-current={day === null ? "page" : undefined}>{upcomingLabel}</Link>
+          : <Link className={`date-chip${current === today ? " active" : ""}`} href={href(basePath, params)} aria-current={current === today ? "page" : undefined}>Today</Link>}
       </div>
       <div className="date-nav-row date-jumps">
         {jumps.map((jump) => (
-          <Link key={jump.label} className={`date-chip${day === jump.day ? " active" : ""}`} href={href(basePath, { date: jump.day })} aria-current={day === jump.day ? "page" : undefined}>{jump.label}</Link>
+          <Link key={jump.label} className={`date-chip${day === jump.day ? " active" : ""}`} href={href(basePath, { ...params, date: jump.day })} aria-current={day === jump.day ? "page" : undefined}>{jump.label}</Link>
         ))}
       </div>
     </nav>

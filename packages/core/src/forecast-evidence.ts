@@ -1,3 +1,21 @@
+import { strongestPrediction, type StoredPrediction } from "./settlement.js";
+
+export const PROBABILITY_THRESHOLDS = [50, 60, 70, 80, 90] as const;
+export function probabilityThreshold(value: string | string[] | undefined): number {
+  const parsed = typeof value === "string" ? Number(value) : NaN;
+  return PROBABILITY_THRESHOLDS.some((threshold) => threshold === parsed) ? parsed : 60;
+}
+
+/** Preserve the newest eligible batch rather than selecting an older, more optimistic forecast. */
+export function highProbabilityPick<T extends StoredPrediction & { trainedUntil: Date }>(
+  predictions: T[], kickoff: Date, now: Date, minimumPercent: number
+): T | null {
+  const eligible = predictions.filter((row) => row.asOfAt < kickoff && row.asOfAt <= now && row.trainedUntil <= row.asOfAt
+    && Number.isFinite(row.probability) && row.probability >= 0 && row.probability <= 1);
+  const pick = strongestPrediction(eligible, kickoff);
+  return pick && pick.probability >= minimumPercent / 100 ? eligible.find((row) => row === pick)! : null;
+}
+
 export interface EvidenceForecast {
   fixtureId: string;
   competitionId: string;
