@@ -5,6 +5,7 @@ import { DayNav, formatDay, RangeNav, rangeLabel } from "../date-nav";
 import { ResearchMoneyCell, ResearchPerformanceSummary, ResearchStakeInput } from "../research-performance";
 import { EVIDENCE_WINDOW_DAYS, forecastEvidence } from "@highodds/core";
 import { loadForecastEvidence } from "../../lib/forecast-evidence";
+import { resolveResearchQuote } from "../../lib/research-odds";
 
 export const dynamic = "force-dynamic";
 
@@ -131,12 +132,10 @@ export default async function ResearchWorkspace({ searchParams, view }: {
       .filter((row) => (row.market.normalizedKey ?? row.market.name) === screenMarket && row.selection === screenSelection)
       .filter((row) => row.asOfAt < fixture.kickoff && row.modelRun.trainedUntil <= row.asOfAt)
       .sort((a, b) => b.asOfAt.getTime() - a.asOfAt.getTime())[0];
-    const quotes = fixture.quotes
-      .filter((quote) => quote.bookmaker.active && (quote.market.normalizedKey ?? quote.market.name) === screenMarket && quote.selection === screenSelection)
-      .filter((quote) => quote.capturedAt < fixture.kickoff)
-      .filter((quote) => maxQuoteAge === 0 || fixture.kickoff.getTime() - quote.capturedAt.getTime() <= maxQuoteAge * 60_000)
-      .sort((a, b) => Number(b.decimalOdds) - Number(a.decimalOdds));
-    const quote = quotes[0];
+    const quote = resolveResearchQuote(fixture.quotes, {
+      marketKey: screenMarket, selection: screenSelection, kickoff: fixture.kickoff,
+      ...(maxQuoteAge ? { maxQuoteAgeMinutes: maxQuoteAge } : {}), mode: "historical"
+    });
     if (!prediction || !quote || Number(prediction.probability) < minProbability || Number(quote.decimalOdds) < minOdds) return [];
     return [{ fixture, probability: Number(prediction.probability), odds: Number(quote.decimalOdds), bookmaker: quote.bookmaker.name, quoteCapturedAt: quote.capturedAt, predictionAsOfAt: prediction.asOfAt, trainedUntil: prediction.modelRun.trainedUntil }];
   }) : [];
