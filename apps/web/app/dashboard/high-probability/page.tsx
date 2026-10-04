@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { db } from "@highodds/db";
 import { auth } from "../../../auth";
 import { blantyreDayBounds, blantyreToday, forecastEvidence, highProbabilityPick, legOutcome, parseIsoDay, probabilityThreshold, PROBABILITY_THRESHOLDS, type StoredPrediction } from "@highodds/core";
-import { LEG_OUTCOME_LABEL, shortPickLabel } from "../../../lib/selection";
+import { LEG_OUTCOME_LABEL, selectionLabel, shortPickLabel } from "../../../lib/selection";
 import { loadForecastEvidence } from "../../../lib/forecast-evidence";
 import { DayNav, formatDay } from "../../date-nav";
 import { MODEL_PICK_FILTERS, modelPickFilter } from "@highodds/core";
@@ -10,6 +10,7 @@ import { MODEL_PICK_FILTERS, modelPickFilter } from "@highodds/core";
 export const dynamic = "force-dynamic";
 
 const TIER_LABEL: Record<string, string> = { STANDARD: "Standard", VALUE: "Value", HIGH: "High" };
+const MARKET_LABEL: Record<string, string> = { MATCH_WINNER: "Match winner", TOTAL_GOALS: "Total goals", BTTS: "Both teams score" };
 
 const BLANTYRE_TIME = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Africa/Blantyre", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
@@ -62,6 +63,19 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const pick = highProbabilityPick(predictionsByFixture.get(fixture.id) ?? [], fixture.kickoff, now, minimumPercent, pickFilter);
     return pick ? [{ fixture, pick }] : [];
   });
+  const selectionSummary = new Map<string, { market: string; selection: string; selected: number; settled: number; won: number; lost: number; voided: number }>();
+  for (const { fixture, pick } of modelPickFixtures) {
+    const market = pick.marketKey!;
+    const key = `${market}\u0000${pick.selection}`;
+    const row = selectionSummary.get(key) ?? { market, selection: pick.selection, selected: 0, settled: 0, won: 0, lost: 0, voided: 0 };
+    const outcome = legOutcome(market, pick.selection, fixture);
+    row.selected += 1;
+    if (outcome === "WIN") { row.settled += 1; row.won += 1; }
+    else if (outcome === "LOSS") { row.settled += 1; row.lost += 1; }
+    else if (outcome === "VOID") row.voided += 1;
+    selectionSummary.set(key, row);
+  }
+  const selectionSummaryRows = [...selectionSummary.values()].sort((a, b) => a.market.localeCompare(b.market) || a.selection.localeCompare(b.selection));
   const evidenceRows = await loadForecastEvidence(modelPickFixtures.map(({ fixture, pick }) => ({
     fixtureId: fixture.id, competitionId: fixture.competitionId, forecastAt: pick.asOfAt
   })));
@@ -81,6 +95,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <label>Model pick <select name="pick" defaultValue={pickFilter.value}>{MODEL_PICK_FILTERS.map((filter) => <option key={filter.value} value={filter.value}>{filter.label}</option>)}</select></label>
           <button type="submit" className="date-go">Show matches</button>
         </form>
+        <section className="high-probability-summary" aria-labelledby="high-probability-summary-title">
+          <div className="section-heading"><div><p className="eyebrow">SELECTION SUMMARY</p><h3 id="high-probability-summary-title">Selected market performance</h3></div><p className="meta">For the date and filters above</p></div>
+          <div className="matches-table-wrap"><table className="matches-table high-probability-summary-table">
+            <thead><tr><th>Selected market</th><th>Selection</th><th>Selected</th><th>Settled</th><th>Won</th><th>Lost</th><th>Hit rate</th></tr></thead>
+            <tbody>{selectionSummaryRows.length === 0 ? <tr><td colSpan={7}>No selections meet the current filters.</td></tr> : selectionSummaryRows.map((row) => <tr key={`${row.market}-${row.selection}`}>
+              <th scope="row">{MARKET_LABEL[row.market] ?? row.market}</th><td>{selectionLabel(row.selection)}</td><td className="num">{row.selected}</td><td className="num">{row.settled}</td><td className="num">{row.won}</td><td className="num">{row.lost}</td><td className="num">{row.settled ? `${(row.won / row.settled * 100).toFixed(1)}%` : "—"}</td>
+            </tr>)}</tbody>
+          </table></div>
+          <p className="meta">Only won and lost selections are included in the hit-rate denominator. Pending and void selections remain out of the denominator.</p>
+        </section>
         <p>{modelPickFixtures.length} matches · {pickFilter.label} · {minimumPercent}% and above. One strongest selection from each match&apos;s latest eligible pre-kickoff forecast batch. The model-pick filter matches that strongest selection. Times are Africa/Blantyre. These are research signals; probability alone does not qualify a paper ticket.</p>
         {modelPickFixtures.length === 0 ? <div className="notice">No matches have {pickFilter.value === "ALL" ? "an eligible model pick" : `${pickFilter.label} as their strongest model pick`} at {minimumPercent}% and above for {formatDay(day)}. Try another model pick, a lower threshold or another date.</div> : (
           <div className="matches-table-wrap">
