@@ -443,6 +443,12 @@ h2 { font-size: 1.15rem; letter-spacing: -0.01em; margin: 32px 0 12px; }
 .high-probability-summary { margin: 22px 0; }
 .high-probability-summary h3 { margin: 0; font-size: 16px; }
 .high-probability-summary-table { min-width: 760px; }
+.high-probability-simulation { margin: 22px 0; }
+.high-probability-simulation h3 { margin: 0; font-size: 16px; }
+.high-probability-simulation > .meta { margin-top: 10px; }
+.matches-table td.match-odds { min-width: 145px; white-space: nowrap; }
+.match-odds strong, .match-odds small { display: block; }
+.match-odds small { margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.4; }
 .matches-table td.match-calibration { min-width: 240px; max-width: 360px; white-space: normal; line-height: 1.5; }
 .match-calibration p { margin: 0 0 6px; }
 .match-calibration summary { cursor: pointer; color: var(--muted); font-size: 12px; }
