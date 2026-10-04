@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@highodds/db";
-import { blantyreDayBounds, blantyreToday, displayLegOutcome, parseIsoDay, parseSettlementEvidence, resolveDayRange, resolveSelection } from "@highodds/core";
+import { blantyreDayBounds, blantyreToday, displayLegOutcome, highProbabilityPick, MODEL_PICK_FILTERS, modelPickFilter, parseIsoDay, parseSettlementEvidence, PROBABILITY_THRESHOLDS, resolveDayRange, resolveSelection, type StoredPrediction } from "@highodds/core";
 import { DayNav, formatDay, RangeNav, rangeLabel } from "../date-nav";
 import { ResearchMoneyCell, ResearchPerformanceSummary, ResearchStakeInput } from "../research-performance";
 import { EVIDENCE_WINDOW_DAYS, forecastEvidence } from "@highodds/core";
@@ -51,7 +51,7 @@ function cleanScreenValue(value: string | string[] | undefined, allowed: readonl
 
 export type ResearchSearchParams = {
   fixture?: string | string[]; date?: string | string[]; range?: string | string[]; from?: string | string[]; to?: string | string[]; screen?: string | string[]; market?: string | string[];
-  selection?: string | string[]; minProbability?: string | string[]; minOdds?: string | string[]; maxQuoteAge?: string | string[]; stake?: string | string[];
+  selection?: string | string[]; pick?: string | string[]; minProbability?: string | string[]; minOdds?: string | string[]; maxQuoteAge?: string | string[]; stake?: string | string[]; pricedOnly?: string | string[];
   summaryRange?: string | string[]; summaryFrom?: string | string[]; summaryTo?: string | string[];
 };
 
@@ -62,12 +62,15 @@ export default async function ResearchWorkspace({ searchParams, view }: {
   const { fixture: fixtureParam, date } = params;
   const fixtureId = typeof fixtureParam === "string" ? fixtureParam : undefined;
   const screening = view === "screener";
-  const screenMarket = cleanScreenValue(params.market, SCREEN_MARKETS, "TOTAL_GOALS");
-  const screenSelection = cleanScreenValue(params.selection, SCREEN_SELECTIONS, "UNDER_2_5");
+  const legacyMarket = cleanScreenValue(params.market, SCREEN_MARKETS, "TOTAL_GOALS");
+  const legacySelection = cleanScreenValue(params.selection, SCREEN_SELECTIONS, "UNDER_2_5");
+  const legacyPick = MODEL_PICK_FILTERS.find((filter) => filter.market === legacyMarket && filter.selection === legacySelection)?.value ?? "ALL";
+  const modelFilter = modelPickFilter(typeof params.pick === "string" ? params.pick : legacyPick);
   const minProbability = Math.min(1, Math.max(0, numberParam(params.minProbability, 60) / 100));
   const minOdds = Math.max(1, numberParam(params.minOdds, 1.8));
   const maxQuoteAge = Math.max(0, numberParam(params.maxQuoteAge, 0));
   const stakePerSelection = Math.min(1_000_000, Math.max(0.01, numberParam(params.stake, 1)));
+  const pricedOnly = params.pricedOnly === "1" || params.pricedOnly === "on";
   const now = new Date();
   const today = blantyreToday(now);
   const day = parseIsoDay(date);
@@ -128,16 +131,18 @@ export default async function ResearchWorkspace({ searchParams, view }: {
   });
 
   const screenCandidates = screening ? fixtures.flatMap((fixture) => {
-    const prediction = fixture.predictions
-      .filter((row) => (row.market.normalizedKey ?? row.market.name) === screenMarket && row.selection === screenSelection)
-      .filter((row) => row.asOfAt < fixture.kickoff && row.modelRun.trainedUntil <= row.asOfAt)
-      .sort((a, b) => b.asOfAt.getTime() - a.asOfAt.getTime())[0];
+    const pick = highProbabilityPick(fixture.predictions.map((row) => ({
+      marketKey: row.market.normalizedKey ?? row.market.name, selection: row.selection, probability: Number(row.probability),
+      asOfAt: row.asOfAt, trainedUntil: row.modelRun.trainedUntil
+    } satisfies StoredPrediction & { trainedUntil: Date })), fixture.kickoff, now, 0, modelFilter);
+    if (!pick || pick.probability < minProbability) return [];
     const quote = resolveResearchQuote(fixture.quotes, {
-      marketKey: screenMarket, selection: screenSelection, kickoff: fixture.kickoff,
+      marketKey: pick.marketKey!, selection: pick.selection, kickoff: fixture.kickoff,
       ...(maxQuoteAge ? { maxQuoteAgeMinutes: maxQuoteAge } : {}), mode: "historical"
     });
-    if (!prediction || !quote || Number(prediction.probability) < minProbability || Number(quote.decimalOdds) < minOdds) return [];
-    return [{ fixture, probability: Number(prediction.probability), odds: Number(quote.decimalOdds), bookmaker: quote.bookmaker.name, quoteCapturedAt: quote.capturedAt, predictionAsOfAt: prediction.asOfAt, trainedUntil: prediction.modelRun.trainedUntil }];
+    if (pricedOnly && !quote) return [];
+    if (quote && Number(quote.decimalOdds) < minOdds) return [];
+    return [{ fixture, marketKey: pick.marketKey!, selection: pick.selection, probability: pick.probability, odds: quote ? Number(quote.decimalOdds) : null, bookmaker: quote?.bookmaker.name ?? null, quoteCapturedAt: quote?.capturedAt ?? null, predictionAsOfAt: pick.asOfAt, trainedUntil: pick.trainedUntil }];
   }) : [];
 
   const selectedFixture = selected;
@@ -174,10 +179,10 @@ export default async function ResearchWorkspace({ searchParams, view }: {
   const candidateResults = screenCandidates.map((candidate) => {
     const fixture = candidate.fixture;
     const finished = fixture.status === "FINISHED" && fixture.homeGoals !== null && fixture.awayGoals !== null;
-    const outcome = finished ? resolveSelection(screenMarket, screenSelection, fixture.homeGoals!, fixture.awayGoals!) : null;
+    const outcome = finished ? resolveSelection(candidate.marketKey, candidate.selection, fixture.homeGoals!, fixture.awayGoals!) : null;
     const voided = fixture.status === "POSTPONED" || fixture.status === "CANCELLED";
     const result = voided ? "VOID" : outcome ?? "PENDING";
-    const profitUnits = result === "WIN" ? candidate.odds - 1 : result === "LOSS" ? -1 : result === "VOID" ? 0 : null;
+    const profitUnits = candidate.odds === null ? null : result === "WIN" ? candidate.odds - 1 : result === "LOSS" ? -1 : result === "VOID" ? 0 : null;
     return { ...candidate, result, profitUnits };
   });
   const settledCandidates = candidateResults.filter((candidate) => candidate.profitUnits !== null);
@@ -186,12 +191,12 @@ export default async function ResearchWorkspace({ searchParams, view }: {
   const voids = settledCandidates.filter((candidate) => candidate.result === "VOID").length;
   const pending = candidateResults.length - settledCandidates.length;
   const settledCount = settledCandidates.length;
-  const returnsPerUnit = settledCandidates.reduce((sum, candidate) => sum + (candidate.result === "WIN" ? candidate.odds : 0), 0);
+  const returnsPerUnit = settledCandidates.reduce((sum, candidate) => sum + (candidate.result === "WIN" && candidate.odds !== null ? candidate.odds : 0), 0);
   const netPerUnit = settledCandidates.reduce((sum, candidate) => sum + candidate.profitUnits!, 0);
   const roi = settledCount > 0 ? netPerUnit / settledCount * 100 : null;
   const listHref = (id: string) => `/research?${new URLSearchParams({ fixture: id, ...(day ? { date: day } : {}) })}`;
   const screenHref = (overrides: Record<string, string> = {}) => {
-    const values = { ...(range.preset === "custom" ? { from: range.from!, to: range.to! } : { range: range.preset }), screen: "1", market: screenMarket, selection: screenSelection, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), stake: stakePerSelection.toFixed(2), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}), ...overrides };
+    const values = { ...(range.preset === "custom" ? { from: range.from!, to: range.to! } : { range: range.preset }), screen: "1", pick: modelFilter.value, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), stake: stakePerSelection.toFixed(2), ...(pricedOnly ? { pricedOnly: "1" } : {}), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}), ...overrides };
     return `/research/screener?${new URLSearchParams(Object.entries(values).filter(([, value]) => value !== "")).toString()}`;
   };
 
@@ -242,30 +247,32 @@ export default async function ResearchWorkspace({ searchParams, view }: {
     <p className="eyebrow">RESEARCH WORKSPACE</p>
     <h1>{view === "fixture" ? "Fixture Inspector" : view === "screener" ? "Historical Screener" : "Forecast Archive"}</h1>
     <p className="page-intro">{view === "fixture" ? "Inspect one fixture from forecast to result: probabilities, captured prices, and settlement evidence." : view === "screener" ? "Compare historical pre-kickoff forecasts and captured prices, with outcomes and paper returns." : "Review the model's highest-probability selections and outcome hit rates over time."} Probabilities are model estimates, not validated edges or betting recommendations.</p>
-    {screening ? <RangeNav basePath="/research/screener" range={range} today={today} params={{ screen: "1", market: screenMarket, selection: screenSelection, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), stake: stakePerSelection.toFixed(2), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}) }} /> : view === "fixture" ? <DayNav basePath="/research" day={day} today={today} allowFuture upcomingLabel="Upcoming" /> : null}
+    {screening ? <RangeNav basePath="/research/screener" range={range} today={today} params={{ screen: "1", pick: modelFilter.value, minProbability: String(Math.round(minProbability * 100)), minOdds: String(minOdds), stake: stakePerSelection.toFixed(2), ...(pricedOnly ? { pricedOnly: "1" } : {}), ...(maxQuoteAge ? { maxQuoteAge: String(maxQuoteAge) } : {}) }} /> : view === "fixture" ? <DayNav basePath="/research" day={day} today={today} allowFuture upcomingLabel="Upcoming" /> : null}
     {screening && <section className="research-screener" aria-labelledby="research-screener-title">
       <div><p className="eyebrow">RESEARCH SCREENER</p><h2 id="research-screener-title">Find evidence-matched candidates</h2><p className="meta">Filter stored pre-kickoff model forecasts and active-bookmaker quotes. Submit the form to see historical selection analysis with settled P&amp;L, net, and ROI.</p></div>
       <form className="research-filter-form" action="/research/screener" method="get">
         <input type="hidden" name="screen" value="1" />
         {range.preset === "custom" ? <><input type="hidden" name="from" value={range.from ?? ""} /><input type="hidden" name="to" value={range.to ?? ""} /></> : <input type="hidden" name="range" value={range.preset} />}
-        <label>Market<select name="market" defaultValue={screenMarket}><option value="TOTAL_GOALS">Total goals</option><option value="MATCH_WINNER">Match winner</option><option value="BTTS">Both teams score</option></select></label>
-        <label>Selection<select name="selection" defaultValue={screenSelection}>{SCREEN_SELECTIONS.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></label>
-        <label>Min probability %<input name="minProbability" type="number" min="0" max="100" step="1" defaultValue={Math.round(minProbability * 100)} /></label>
-        <label>Min captured odds<input name="minOdds" type="number" min="1.01" max="1000" step="0.01" defaultValue={minOdds.toFixed(2)} /></label>
-        <ResearchStakeInput initialStake={stakePerSelection} />
-        <label>Max quote age at kickoff (min)<input name="maxQuoteAge" type="number" min="0" step="30" placeholder="Any" defaultValue={maxQuoteAge || ""} /></label>
+        <label>Model probability<select name="minProbability" defaultValue={String(Math.round(minProbability * 100))}>{PROBABILITY_THRESHOLDS.map((threshold) => <option key={threshold} value={threshold}>{threshold}% and above</option>)}</select></label>
+        <label>Model pick<select name="pick" defaultValue={modelFilter.value}>{MODEL_PICK_FILTERS.map((filter) => <option key={filter.value} value={filter.value}>{filter.label}</option>)}</select></label>
+        <label className="inline-checkbox"><input type="checkbox" name="pricedOnly" value="1" defaultChecked={pricedOnly} /> Priced only</label>
+        <details className="research-filter-advanced"><summary>Advanced pricing filters</summary><div className="research-filter-advanced-fields">
+          <label>Min captured odds<input name="minOdds" type="number" min="1.01" max="1000" step="0.01" defaultValue={minOdds.toFixed(2)} /></label>
+          <ResearchStakeInput initialStake={stakePerSelection} />
+          <label>Max quote age at kickoff (min)<input name="maxQuoteAge" type="number" min="0" step="30" placeholder="Any" defaultValue={maxQuoteAge || ""} /></label>
+        </div></details>
         <button className="date-go" type="submit">Find candidates</button>
       </form>
-      <div className="research-presets"><span>Historical analysis:</span><Link href={screenHref({ minProbability: "60", minOdds: "1.8" })}>Last 30 days · Under 2.5 · ≥60% · ≥1.80</Link><Link href={screenHref({ minProbability: "60", minOdds: "2.1" })}>Last 30 days · Under 2.5 · ≥60% · ≥2.10</Link></div>
+      <div className="research-presets"><span>Historical analysis:</span><Link href={screenHref({ pick: "UNDER_2_5", minProbability: "60", minOdds: "1.8" })}>Last 30 days · Under 2.5 · ≥60% · ≥1.80</Link><Link href={screenHref({ pick: "UNDER_2_5", minProbability: "60", minOdds: "2.1" })}>Last 30 days · Under 2.5 · ≥60% · ≥2.10</Link></div>
     </section>}
-    {screening && <section className="research-candidates" aria-labelledby="research-candidates-title"><div className="section-heading"><div><p className="eyebrow">SELECTION ANALYSIS · {screenCandidates.length} MATCH{screenCandidates.length === 1 ? "" : "ES"}</p><h2 id="research-candidates-title">{label(screenSelection)} · P&amp;L / Net / ROI</h2></div><p className="meta">{label(screenMarket)} · {rangeLabel(range)} · probability ≥ {pct(minProbability)} · odds ≥ {minOdds.toFixed(2)}{maxQuoteAge ? ` · quote age ≤ ${maxQuoteAge} min` : ""}</p></div>
+    {screening && <section className="research-candidates" aria-labelledby="research-candidates-title"><div className="section-heading"><div><p className="eyebrow">MODEL PICK ANALYSIS · {screenCandidates.length} MATCH{screenCandidates.length === 1 ? "" : "ES"}</p><h2 id="research-candidates-title">{modelFilter.label} · P&amp;L / Net / ROI</h2></div><p className="meta">{rangeLabel(range)} · probability ≥ {pct(minProbability)}{pricedOnly ? " · priced only" : ""} · odds ≥ {minOdds.toFixed(2)}{maxQuoteAge ? ` · quote age ≤ ${maxQuoteAge} min` : ""}</p></div>
       <ResearchPerformanceSummary initialStake={stakePerSelection} settledCount={settledCount} wins={wins} losses={losses} voids={voids} pending={pending} returnsPerUnit={returnsPerUnit} netPerUnit={netPerUnit} roiPercent={roi} />
       {screenCandidates.length === 0 ? <div className="notice">No stored matches meet all filters for {rangeLabel(range)}. The analysis cards above are zeroed because there are no qualifying selections.</div> : <div className="matches-table-wrap"><table className="matches-table"><thead><tr><th>Match</th><th>Kickoff</th><th>Model probability</th><th>Captured odds</th><th>Bookmaker</th><th>Match result</th><th>Net P&amp;L</th><th>Evidence</th></tr></thead><tbody>{candidateResults.map((candidate) => {
         const fixture = candidate.fixture;
         const scoreText = score(fixture);
         const outcomeLabel = candidate.result === "VOID" ? "Void" : candidate.result === "WIN" ? "Won" : candidate.result === "LOSS" ? "Lost" : "Pending";
         const outcomeClass = outcomeLabel.toLowerCase();
-        return <tr key={fixture.id}><th scope="row"><Link href={listHref(fixture.id)}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</Link><small>{fixture.competition.name}</small></th><td>{dateTime(fixture.kickoff)}</td><td className="num">{pct(candidate.probability)}</td><td className="num">{candidate.odds.toFixed(2)}</td><td>{candidate.bookmaker}</td><td className="research-candidate-result">{scoreText ?? "—"}<span className={`status-badge ${outcomeClass}`}>{outcomeLabel}</span></td><ResearchMoneyCell initialStake={stakePerSelection} profitUnits={candidate.profitUnits} /><td><small>Forecast {dateTime(candidate.predictionAsOfAt)}<br />Quote {dateTime(candidate.quoteCapturedAt)}</small></td></tr>;
+        return <tr key={fixture.id}><th scope="row"><Link href={listHref(fixture.id)}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</Link><small>{fixture.competition.name} · {label(candidate.marketKey)} · {label(candidate.selection)}</small></th><td>{dateTime(fixture.kickoff)}</td><td className="num">{pct(candidate.probability)}</td><td className="num">{candidate.odds === null ? "—" : candidate.odds.toFixed(2)}</td><td>{candidate.bookmaker ?? "No eligible quote"}</td><td className="research-candidate-result">{scoreText ?? "—"}<span className={`status-badge ${outcomeClass}`}>{outcomeLabel}</span></td><ResearchMoneyCell initialStake={stakePerSelection} profitUnits={candidate.profitUnits} /><td><small>Forecast {dateTime(candidate.predictionAsOfAt)}<br />{candidate.quoteCapturedAt ? `Quote ${dateTime(candidate.quoteCapturedAt)}` : "No captured quote"}</small></td></tr>;
       })}</tbody></table></div>}
     </section>}
     {view === "history" && <section className="research-high-probability" aria-labelledby="research-high-probability-title">
