@@ -1,7 +1,6 @@
 import { db } from "@highodds/db";
-import { dixonColesDistribution, expectedGoals, HISTORY_LOOKBACK_DAYS, leagueEligibility, SELECTION_WINDOW_HOURS, type TeamStrengths, type CompletedMatch } from "@highodds/core";
+import { dixonColesDistribution, expectedGoals, HISTORY_LOOKBACK_DAYS, leagueEligibility, predictionWindow, type ForecastOptions, type TeamStrengths, type CompletedMatch } from "@highodds/core";
 
-const SELECTION_WINDOW_MS = SELECTION_WINDOW_HOURS * 60 * 60 * 1000;
 const HISTORY_LOOKBACK_MS = HISTORY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
 
 const MARKET_SELECTIONS: Record<string, Array<{ selection: string; pick: (dist: ReturnType<typeof dixonColesDistribution>) => number }>> = {
@@ -20,10 +19,10 @@ const MARKET_SELECTIONS: Record<string, Array<{ selection: string; pick: (dist: 
   ]
 };
 
-export async function generatePredictions(now: Date): Promise<{ predicted: number; skipped: number }> {
-  const windowEnd = new Date(now.getTime() + SELECTION_WINDOW_MS);
+export async function generatePredictions(now: Date, options: ForecastOptions = {}): Promise<{ predicted: number; skipped: number }> {
+  const stage = options.stage ?? "SELECTION";
   const fixtures = await db.fixture.findMany({
-    where: { status: "SCHEDULED", kickoff: { gte: now, lte: windowEnd } },
+    where: { status: "SCHEDULED", kickoff: predictionWindow(now, options) },
     select: { id: true, competitionId: true, homeTeamId: true, awayTeamId: true, kickoff: true }
   });
 
@@ -36,7 +35,7 @@ export async function generatePredictions(now: Date): Promise<{ predicted: numbe
   for (const fixture of fixtures) {
     let modelRun = modelRunCache.get(fixture.competitionId);
     if (modelRun === undefined) {
-      const latest = await db.modelRun.findFirst({ where: { competitionId: fixture.competitionId }, orderBy: { createdAt: "desc" } });
+      const latest = await db.modelRun.findFirst({ where: { competitionId: fixture.competitionId, trainedUntil: { lte: now } }, orderBy: { createdAt: "desc" } });
       modelRun = latest ? { id: latest.id, strengths: latest.artifact as unknown as TeamStrengths } : null;
       modelRunCache.set(fixture.competitionId, modelRun);
     }
@@ -44,11 +43,11 @@ export async function generatePredictions(now: Date): Promise<{ predicted: numbe
     if (!modelRun.strengths.teams[fixture.homeTeamId] || !modelRun.strengths.teams[fixture.awayTeamId]) { skipped += 1; continue; }
 
     const history = await db.fixture.findMany({
-      where: { competitionId: fixture.competitionId, status: "FINISHED", kickoff: { gte: new Date(fixture.kickoff.getTime() - HISTORY_LOOKBACK_MS), lt: fixture.kickoff }, homeGoals: { not: null }, awayGoals: { not: null } },
+      where: { competitionId: fixture.competitionId, status: "FINISHED", kickoff: { gte: new Date(now.getTime() - HISTORY_LOOKBACK_MS), lt: now }, receivedAt: { lte: now }, homeGoals: { not: null }, awayGoals: { not: null } },
       select: { kickoff: true, homeTeamId: true, awayTeamId: true, homeGoals: true, awayGoals: true }
     });
     const matches: CompletedMatch[] = history.map((h) => ({ kickoff: h.kickoff, homeTeamId: h.homeTeamId, awayTeamId: h.awayTeamId, homeGoals: h.homeGoals!, awayGoals: h.awayGoals! }));
-    const eligibility = leagueEligibility(matches, fixture.kickoff, fixture.homeTeamId, fixture.awayTeamId);
+    const eligibility = leagueEligibility(matches, now, fixture.homeTeamId, fixture.awayTeamId);
     if (!eligibility.eligible) { skipped += 1; continue; }
 
     const goals = expectedGoals(fixture.homeTeamId, fixture.awayTeamId, modelRun.strengths);
@@ -58,9 +57,9 @@ export async function generatePredictions(now: Date): Promise<{ predicted: numbe
       const marketId = marketByKey.get(marketKey);
       if (!marketId) continue;
       for (const { selection, pick } of selections) {
-        const existing = await db.prediction.findFirst({ where: { fixtureId: fixture.id, marketId, selection, modelRunId: modelRun.id } });
+        const existing = await db.prediction.findFirst({ where: { fixtureId: fixture.id, marketId, selection, modelRunId: modelRun.id, stage } });
         if (existing) continue;
-        await db.prediction.create({ data: { fixtureId: fixture.id, marketId, selection, probability: pick(distribution), modelRunId: modelRun.id, asOfAt: now } });
+        await db.prediction.create({ data: { fixtureId: fixture.id, marketId, selection, probability: pick(distribution), modelRunId: modelRun.id, asOfAt: now, stage } });
         predicted += 1;
       }
     }

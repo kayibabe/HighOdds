@@ -12,8 +12,8 @@ export async function loadForecastEvidence(targets: EvidenceTarget[]): Promise<E
   const fixtures = await db.fixture.findMany({
     where: { competitionId: { in: [...new Set(targets.map((target) => target.competitionId))] }, status: "FINISHED",
       kickoff: { gte: start, lt: end }, receivedAt: { lt: end },
-      homeGoals: { not: null }, awayGoals: { not: null }, predictions: { some: {} } },
-    include: { predictions: { orderBy: { asOfAt: "desc" }, include: { market: true, modelRun: true } } }
+      homeGoals: { not: null }, awayGoals: { not: null }, predictions: { some: { stage: "SELECTION" } } },
+    include: { predictions: { where: { stage: "SELECTION" }, orderBy: { asOfAt: "desc" }, include: { market: true, modelRun: true } } }
   });
   return fixtures.flatMap((fixture) => fixture.predictions.flatMap((row) => {
     const market = row.market.normalizedKey ?? row.market.name;

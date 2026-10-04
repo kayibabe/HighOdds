@@ -59,7 +59,7 @@ export async function captureOddsCoverage(now: Date, client: ApiFootballClient):
   if (fixtures.length === 0) return { forecasts: forecast.predicted, checked: 0, retried: 0, captured: 0, rejected: 0, remaining: 0 };
 
   const predictions = await db.prediction.findMany({
-    where: { fixtureId: { in: fixtures.map((fixture) => fixture.id) } },
+    where: { stage: "SELECTION", fixtureId: { in: fixtures.map((fixture) => fixture.id) } },
     orderBy: [{ asOfAt: "desc" }, { id: "asc" }],
     select: { fixtureId: true, selection: true, probability: true, asOfAt: true, modelRun: { select: { trainedUntil: true } }, market: { select: { normalizedKey: true } } }
   });

@@ -27,6 +27,11 @@ enum FixtureStatus {
   CANCELLED
 }
 
+enum PredictionStage {
+  SELECTION
+  PRELIMINARY
+}
+
 enum TicketTier {
   STANDARD
   VALUE
@@ -268,6 +273,7 @@ model Prediction {
   probability Decimal  @db.Decimal(8, 6)
   modelRunId  String
   asOfAt      DateTime
+  stage       PredictionStage @default(SELECTION)
   fixture     Fixture  @relation(fields: [fixtureId], references: [id])
   market      Market   @relation(fields: [marketId], references: [id])
   modelRun    ModelRun @relation(fields: [modelRunId], references: [id])

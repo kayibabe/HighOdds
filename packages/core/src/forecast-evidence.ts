@@ -19,12 +19,18 @@ export function probabilityThreshold(value: string | string[] | undefined): numb
   return PROBABILITY_THRESHOLDS.some((threshold) => threshold === parsed) ? parsed : 90;
 }
 
+/** Operational forecasts take precedence over previews; legacy rows are operational. */
+export function preferSelectionForecasts<T extends { stage?: string }>(rows: T[]): T[] {
+  const selection = rows.filter((row) => row.stage !== "PRELIMINARY");
+  return selection.length ? selection : rows;
+}
+
 /** Preserve the newest eligible batch rather than selecting an older, more optimistic forecast. */
-export function highProbabilityPick<T extends StoredPrediction & { trainedUntil: Date }>(
+export function highProbabilityPick<T extends StoredPrediction & { trainedUntil: Date; stage?: string }>(
   predictions: T[], kickoff: Date, now: Date, minimumPercent: number, filter = modelPickFilter(undefined)
 ): T | null {
-  const eligible = predictions.filter((row) => row.asOfAt < kickoff && row.asOfAt <= now && row.trainedUntil <= row.asOfAt
-    && Number.isFinite(row.probability) && row.probability >= 0 && row.probability <= 1);
+  const eligible = preferSelectionForecasts(predictions.filter((row) => row.asOfAt < kickoff && row.asOfAt <= now && row.trainedUntil <= row.asOfAt
+    && Number.isFinite(row.probability) && row.probability >= 0 && row.probability <= 1));
   const pick = strongestPrediction(eligible, kickoff);
   return pick && pick.probability >= minimumPercent / 100
     && (filter.value === "ALL" || (pick.marketKey === filter.market && pick.selection === filter.selection))

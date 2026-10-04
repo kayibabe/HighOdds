@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { FixtureCalendar } from "../fixture-calendar";
 import { db } from "@highodds/db";
-import { blantyreDayBounds, blantyreToday, displayLegOutcome, highProbabilityPick, historicalScreenerSweetSpot, MODEL_PICK_FILTERS, modelPickFilter, parseIsoDay, parseSettlementEvidence, PROBABILITY_THRESHOLDS, resolveDayRange, resolveSelection, type StoredPrediction } from "@highodds/core";
+import { blantyreDayBounds, blantyreToday, displayLegOutcome, forecastStageLabel, highProbabilityPick, historicalScreenerSweetSpot, MODEL_PICK_FILTERS, modelPickFilter, parseIsoDay, parseSettlementEvidence, preferSelectionForecasts, PROBABILITY_THRESHOLDS, resolveDayRange, resolveSelection, type StoredPrediction } from "@highodds/core";
 import { DayNav, formatDay, RangeNav, rangeLabel } from "../date-nav";
 import { ResearchMoneyCell, ResearchPerformanceSummary, ResearchStakeInput } from "../research-performance";
 import { EVIDENCE_WINDOW_DAYS, forecastEvidence } from "@highodds/core";
@@ -28,7 +28,7 @@ const fixtureInclude = {
 };
 const highProbabilityFixtureInclude = {
   competition: true, homeTeam: true, awayTeam: true,
-  predictions: { orderBy: { asOfAt: "desc" as const }, include: { market: true, modelRun: true } }
+  predictions: { where: { stage: "SELECTION" as const }, orderBy: { asOfAt: "desc" as const }, include: { market: true, modelRun: true } }
 };
 
 function resultHeadline(fixture: { status: string; statusCode: string | null; elapsedMinute: number | null; homeGoals: number | null; awayGoals: number | null }): string {
@@ -84,19 +84,19 @@ export default async function ResearchWorkspace({ searchParams, view }: {
   // screeners keep their evidence-only universe for retrospective performance.
   const fixtures = view !== "history" ? await db.fixture.findMany({
     where: screening
-      ? { ...(rangeBounds ? { kickoff: { gte: rangeBounds.start, lt: rangeBounds.end } } : {}), OR: [{ predictions: { some: {} } }, { ticketLegs: { some: {} } }] }
+      ? { ...(rangeBounds ? { kickoff: { gte: rangeBounds.start, lt: rangeBounds.end } } : {}), OR: [{ predictions: { some: { stage: "SELECTION" } } }, { ticketLegs: { some: {} } }] }
       : day
       ? { kickoff: { gte: blantyreDayBounds(day).start, lt: blantyreDayBounds(day).end } }
       : { kickoff: { gte: new Date(now.getTime() - 12 * 60 * 60 * 1000) }, predictions: { some: {} } },
     orderBy: [{ kickoff: "asc" }, { id: "asc" }],
-    include: fixtureInclude
+    include: screening ? { ...fixtureInclude, predictions: { ...fixtureInclude.predictions, where: { stage: "SELECTION" } } } : fixtureInclude
   }) : [];
   const selected = view === "fixture" ? fixtures.find((fixture) => fixture.id === fixtureId)
     ?? (fixtureId ? await db.fixture.findUnique({ where: { id: fixtureId }, include: fixtureInclude }) : null)
     ?? fixtures[0] : undefined;
 
   const summaryFixtures = view === "history" ? await db.fixture.findMany({
-    where: { kickoff: { ...(summaryBounds.start ? { gte: summaryBounds.start } : {}), lt: summaryBounds.end }, predictions: { some: {} } },
+    where: { kickoff: { ...(summaryBounds.start ? { gte: summaryBounds.start } : {}), lt: summaryBounds.end }, predictions: { some: { stage: "SELECTION" } } },
     orderBy: [{ kickoff: "desc" }, { id: "desc" }], take: 2000, include: highProbabilityFixtureInclude
   }) : [];
 
@@ -163,7 +163,7 @@ export default async function ResearchWorkspace({ searchParams, view }: {
 
   const selectedFixture = selected;
 
-  const probabilityGroups = selectedFixture?.predictions.reduce((groups, prediction) => {
+  const probabilityGroups = selectedFixture && preferSelectionForecasts(selectedFixture.predictions.filter((row) => row.asOfAt < selectedFixture.kickoff && row.asOfAt <= now && row.modelRun.trainedUntil <= row.asOfAt)).reduce((groups, prediction) => {
     if (prediction.asOfAt >= selectedFixture.kickoff || prediction.asOfAt > now || prediction.modelRun.trainedUntil > prediction.asOfAt) return groups;
     const key = prediction.market.normalizedKey ?? prediction.market.name;
     const rows = groups.get(key) ?? [];
@@ -370,7 +370,8 @@ export default async function ResearchWorkspace({ searchParams, view }: {
               <details><summary>Comparison evidence</summary><p className="meta">Probability band: {pct(evidence.lower)}–{pct(evidence.upper)} (upper boundary excluded except 100%). One latest eligible forecast per match. Comparison ends at {dateTime(row.asOfAt)}. Only finished matches whose current result record was received before that forecast are included; later refreshed records are excluded conservatively. Matching model methods may include different trained model versions. The interval assumes independent matches; shared teams and model changes can increase uncertainty. <Link href="/analysis#calibration">View market hit rates and selection bias</Link>.</p></details>
             </div>;
           })}
-          <small>{rows[0] ? `${rows[0].modelRun.method} · trained through ${dateTime(rows[0].modelRun.trainedUntil)} · forecast ${dateTime(rows[0].asOfAt)}` : ""}</small>
+          <small>{rows[0] ? `${forecastStageLabel(rows[0].stage)} · ${rows[0].modelRun.method} · trained through ${dateTime(rows[0].modelRun.trainedUntil)} · forecast ${dateTime(rows[0].asOfAt)}` : ""}</small>
+          {rows[0]?.stage === "PRELIMINARY" && <p className="meta">Preliminary forecast for tomorrow. It may change after morning retraining and cannot publish a paper ticket. Any captured price below is historical, not a current executable offer.</p>}
         </div>)}</div>}
         <h3>Captured prices</h3>
         <p className="meta">Quotes are grouped by market and selection. Each record was captured before kickoff; this feed may be incomplete between provider snapshots.</p>

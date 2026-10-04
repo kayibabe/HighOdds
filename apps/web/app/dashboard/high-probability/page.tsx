@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { db } from "@highodds/db";
 import { auth } from "../../../auth";
-import { blantyreDayBounds, blantyreToday, forecastEvidence, highProbabilityPick, historicalSweetSpot, legOutcome, parseIsoDay, probabilityThreshold, PROBABILITY_THRESHOLDS, type StoredPrediction } from "@highodds/core";
+import { blantyreDayBounds, blantyreToday, forecastEvidence, forecastStageLabel, highProbabilityPick, historicalSweetSpot, legOutcome, parseIsoDay, probabilityThreshold, PROBABILITY_THRESHOLDS, type StoredPrediction } from "@highodds/core";
 import { LEG_OUTCOME_LABEL, selectionLabel, shortPickLabel } from "../../../lib/selection";
 import { loadForecastEvidence } from "../../../lib/forecast-evidence";
 import { DayNav, formatDay } from "../../date-nav";
@@ -57,7 +57,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       JOIN "Fixture" f ON f."id" = p."fixtureId"
       JOIN "Market" m ON m."id" = p."marketId"
       JOIN "ModelRun" mr ON mr."id" = p."modelRunId"
-    WHERE f."status" = 'FINISHED' AND f."kickoff" < ${historicalCutoff}
+    WHERE p."stage" = 'SELECTION' AND f."status" = 'FINISHED' AND f."kickoff" < ${historicalCutoff}
       AND f."homeGoals" IS NOT NULL AND f."awayGoals" IS NOT NULL
       AND m."normalizedKey" IS NOT NULL AND p."asOfAt" < f."kickoff"
       AND mr."trainedUntil" <= p."asOfAt"
@@ -85,17 +85,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     db.prediction.findMany({
       where: { fixtureId: { in: fixtureIds } },
       orderBy: [{ asOfAt: "desc" }, { id: "asc" }],
-      select: { fixtureId: true, selection: true, probability: true, asOfAt: true, modelRun: { select: { method: true, trainedUntil: true } }, market: { select: { normalizedKey: true } } }
+      select: { fixtureId: true, selection: true, probability: true, asOfAt: true, stage: true, modelRun: { select: { method: true, trainedUntil: true } }, market: { select: { normalizedKey: true } } }
     }),
     db.ticketLeg.findMany({
       where: { fixtureId: { in: fixtureIds }, ticketVersion: { successors: { none: {} } } },
       select: { fixtureId: true, marketKey: true, selection: true, ticketVersion: { select: { tier: true } } }
     })
   ]);
-  const predictionsByFixture = new Map<string, (StoredPrediction & { method: string; trainedUntil: Date })[]>();
+  const predictionsByFixture = new Map<string, (StoredPrediction & { method: string; trainedUntil: Date; stage: string })[]>();
   for (const row of predictions) {
     const list = predictionsByFixture.get(row.fixtureId) ?? [];
-    list.push({ marketKey: row.market.normalizedKey, selection: row.selection, probability: Number(row.probability), asOfAt: row.asOfAt, method: row.modelRun.method, trainedUntil: row.modelRun.trainedUntil });
+    list.push({ marketKey: row.market.normalizedKey, selection: row.selection, probability: Number(row.probability), asOfAt: row.asOfAt, stage: row.stage, method: row.modelRun.method, trainedUntil: row.modelRun.trainedUntil });
     predictionsByFixture.set(row.fixtureId, list);
   }
   const legsByFixture = new Map<string, typeof ticketLegs>();
@@ -155,6 +155,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <FixtureCalendar now={now} basePath="/dashboard/high-probability" selectedDay={day} params={{ minProbability: String(minimumPercent), pick: pickFilter.value, stake: simulatorStake.toFixed(2), ...(pricedOnly ? { pricedOnly: "1" } : {}) }} />
       <DayNav basePath="/dashboard/high-probability" day={day} today={today} allowFuture params={{ minProbability: String(minimumPercent), pick: pickFilter.value, stake: simulatorStake.toFixed(2), ...(pricedOnly ? { pricedOnly: "1" } : {}) }} />
       <p className="page-intro">Compare model picks for <strong>{formatDay(day)}</strong> with historical calibration evidence.</p>
+      <p className="meta">Tomorrow&apos;s preliminary market forecasts run at 22:00 Malawi time. Morning forecasts refresh at 07:45–08:00. Preliminary picks may change and cannot publish paper tickets.</p>
       <details open={visiblePicks.length === 0}>
         <summary>All {fixtures.length} pulled matches on {formatDay(day)}</summary>
         {fixtures.length === 0 ? <p>No pulled matches for this date. Calendar refresh coverage is shown above.</p> : <div className="matches-table-wrap"><table className="matches-table">
@@ -197,6 +198,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     <td className="match-summary"><a href={`/research?date=${day}&fixture=${fixture.id}`}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</a><small>{fixture.competition.name} · {fixture.status}{fixture.homeGoals !== null && fixture.awayGoals !== null ? ` · ${fixture.homeGoals}–${fixture.awayGoals}` : ""}</small></td>
                     <td className="match-pick">{pick ? <>
                       <span>{shortPickLabel(pick.marketKey!, pick.selection)} <small>{(pick.probability * 100).toFixed(1)}%</small></span>
+                      <small>{forecastStageLabel(pick.stage)} · {BLANTYRE_RECEIVED.format(pick.asOfAt)}</small>
                       {pickOutcome && pickOutcome !== "PENDING" && <span className={`status-badge leg-outcome ${pickOutcome.toLowerCase()}`}>{LEG_OUTCOME_LABEL[pickOutcome]}</span>}
                     </> : <span className="match-pick-none">—</span>}</td>
                     <td className="match-odds">{quote ? <><strong>{Number(quote.decimalOdds).toFixed(2)}</strong><small>{quote.bookmaker.name}<br />Captured {BLANTYRE_RECEIVED.format(quote.capturedAt)}</small></> : <span className="match-pick-none">No eligible active-bookmaker price</span>}</td>

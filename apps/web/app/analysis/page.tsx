@@ -79,7 +79,7 @@ const PARAMETER_GROUPS: Array<{ title: string; rows: Parameter[] }> = [
   {
     title: "Pipeline",
     rows: [
-      { name: "Selection window", value: `${SELECTION_WINDOW_HOURS} h`, effect: "Predictions and tickets only consider fixtures kicking off this soon after the run." },
+      { name: "Selection window", value: `${SELECTION_WINDOW_HOURS} h`, effect: "Morning selection-window forecasts and paper tickets use this horizon. Evening preliminary forecasts cover tomorrow's full Malawi calendar day." },
       ...DAILY_JOB_SCHEDULE.map((job) => ({ name: label(job.jobType), value: `${job.utcTime} UTC`, effect: "Daily job created idempotently; the runner picks it up on its next pass after this time." })),
       { name: "Job lease / retry", value: `${JOB_LEASE_MINUTES} min / ${JOB_RETRY_MINUTES} min`, effect: "A claimed job not finished within the lease is requeued; a failed job retries after the delay." }
     ]

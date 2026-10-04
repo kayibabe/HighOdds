@@ -41,7 +41,7 @@ export async function publishTickets(now: Date): Promise<PublishResult> {
   if (freshQuotes.length === 0) return result(0);
 
   const predictions = await db.prediction.findMany({
-    where: { fixtureId: { in: fixtureIds }, marketId: { in: markets.map((m) => m.id) } },
+    where: { stage: "SELECTION", fixtureId: { in: fixtureIds }, marketId: { in: markets.map((m) => m.id) } },
     orderBy: { asOfAt: "desc" },
     distinct: ["fixtureId", "marketId", "selection"]
   });

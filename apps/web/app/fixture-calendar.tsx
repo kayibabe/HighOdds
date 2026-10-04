@@ -17,7 +17,7 @@ export async function FixtureCalendar({ now, basePath, selectedDay, params = {} 
     </nav>
     <p className="meta">Today and the following six days · Malawi time. {calendar.completed === calendar.expected ? "Calendar refresh complete." : `Calendar refresh pending: ${calendar.completed}/${calendar.expected} date requests complete; counts may be incomplete.`}
       {calendar.lastCompletedAt && ` Last successful pull: ${new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Blantyre", dateStyle: "medium", timeStyle: "short" }).format(calendar.lastCompletedAt)}.`}
-      {` Forecasts and paper tickets are assessed within ${SELECTION_WINDOW_HOURS} hours of kickoff; later fixtures may have no forecast or odds yet.`}
+      {` Tomorrow's preliminary forecasts run at 22:00 Malawi time. Morning refresh: 07:45–08:00. Paper tickets retain the ${SELECTION_WINDOW_HOURS}-hour window and fresh-odds checks; later fixtures may have no forecast or odds yet.`}
     </p>
   </section>;
 }

@@ -58,7 +58,7 @@ export default async function ResultsPage({ searchParams }: { searchParams: Prom
   const settledTicketIds = settlementRows.filter((row) => row.outcome !== "PENDING").map((row) => row.ticketVersionId);
   const clv = await averageClv(settledTicketIds);
   const historicalPredictions = await db.prediction.findMany({
-    where: { fixture: { status: "FINISHED", kickoff: { lt: new Date() }, homeGoals: { not: null }, awayGoals: { not: null }, ...kickoffFilter(range) } },
+    where: { stage: "SELECTION", fixture: { status: "FINISHED", kickoff: { lt: new Date() }, homeGoals: { not: null }, awayGoals: { not: null }, ...kickoffFilter(range) } },
     include: { fixture: { select: { kickoff: true, homeGoals: true, awayGoals: true } }, market: { select: { normalizedKey: true } }, modelRun: { select: { trainedUntil: true } } },
     orderBy: { asOfAt: "desc" }, take: 10000
   });

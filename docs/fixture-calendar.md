@@ -25,11 +25,36 @@ refresh coverage. Counts represent stored matches of all statuses, not qualified
 zero counts during incomplete refresh must not be treated as a confirmed empty slate.
 The Inspector lists every pulled fixture for the chosen day, including unforecast matches.
 
-Predictions, odds coverage and publication retain the 20-hour selection window. Bulk
+Selection-window predictions, odds coverage and publication retain the 20-hour window. Bulk
 odds ingestion covers all UTC dates intersecting that window, including tomorrow when
-needed. Forecasts outside this window are not fabricated. Historical screening, model
+needed. Historical screening, model
 training, performance denominators, immutable decisions and settlement rules are unchanged.
 
-Deployment needs no schema migration. On the first jobs tick, additional calendar dates
+On the first jobs tick, additional calendar dates
 are queued even if today's original ingestion already completed. Verify persisted
 per-date DONE jobs, future fixture counts, production health and served calendar views.
+
+## Evening forecasts
+
+EVENING_FORECAST runs at 20:00 UTC (22:00 Malawi time), forecasting tomorrow's entire
+local calendar day, including evening matches beyond the 20-hour selection window.
+The job pins its targetDate in its payload so a retry after midnight still addresses
+the intended date and excludes matches already started. It uses stored fixtures and
+the latest model trained by the forecast time; it makes no additional provider calls,
+does not retrain, capture odds, or publish tickets. Missing models, team strengths or
+sufficient league/team history still produce no forecast.
+
+Prediction.stage separates PRELIMINARY from SELECTION, with historical rows defaulting
+to SELECTION. Both stages retain their original timestamp and model lineage; a morning
+forecast can be created even with the same model that produced the preview. Repeating
+the same stage/model/match is idempotent. The morning TRAIN_MODEL (07:00 local), odds
+coverage (07:45 local) and publication (08:00 local) schedule remains in place.
+
+The Inspector and High Probability Matches show preview labels and forecast times,
+and prefer an eligible SELECTION forecast whenever available. Captured prices retain
+their capture timestamps. Ticket selection, odds-coverage targets and existing historical
+calibration/performance reports explicitly exclude PRELIMINARY rows. The stage is not
+evidence of a bet's profitability or qualification.
+
+Apply migration 20261004220000_prediction_stage before releasing the new web/jobs code.
+It adds a defaulted enum column without changing existing forecasts or ticket decisions.

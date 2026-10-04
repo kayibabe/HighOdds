@@ -1,6 +1,7 @@
 import { ApiFootballClient } from "./api-football.js";
 import { parseIsoDay, providerDates, SELECTION_WINDOW_HOURS } from "@highodds/core";
 import { ingestFixtures, ingestOdds } from "./ingestion.js";
+import { generatePredictions } from "./predict.js";
 import { captureOddsCoverage } from "./odds-coverage.js";
 import { claimDueJobs, completeJob, ensureDailyJobs, failAndReleaseJob, requeueExpiredLeases } from "./schedule.js";
 import { NoTrainingDataError, assertTrainedAny, trainModel } from "./train.js";
@@ -16,6 +17,14 @@ async function execute(job: { jobType: string; idempotencyKey: string; payload?:
   const client = new ApiFootballClient();
   const date = new Date().toISOString().slice(0, 10);
   switch (job.jobType) {
+    case "EVENING_FORECAST": {
+      const targetDate = job.payload && typeof job.payload === "object" && "targetDate" in job.payload
+        ? parseIsoDay(job.payload.targetDate) : null;
+      if (!targetDate) throw new Error("Evening forecast requires a valid pinned target date");
+      const result = await generatePredictions(new Date(), { stage: "PRELIMINARY", targetDate });
+      console.log(`EVENING_FORECAST targetDate=${targetDate} predicted=${result.predicted} skipped=${result.skipped}`);
+      return { targetDate, ...result };
+    }
     case "INGEST_FIXTURES": {
       const requestedDate = job.payload && typeof job.payload === "object" && "fixtureDate" in job.payload
         ? parseIsoDay(job.payload.fixtureDate) : parseIsoDay(job.idempotencyKey.split(":").at(-1)) ?? date;

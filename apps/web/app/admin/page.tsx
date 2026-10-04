@@ -8,6 +8,11 @@ export const dynamic = "force-dynamic";
 
 function fmt(date: Date | null | undefined): string { return date ? date.toISOString().replace("T", " ").slice(0, 16) : "—"; }
 function coverage(job: { jobType: string; payload: unknown }): string {
+  if (job.jobType === "EVENING_FORECAST" && job.payload && typeof job.payload === "object") {
+    const value = job.payload as Record<string, unknown>;
+    return typeof value.predicted === "number" && typeof value.skipped === "number"
+      ? `${value.targetDate}: ${value.predicted} market outcomes; ${value.skipped} skipped matches` : "Awaiting evening forecast";
+  }
   if (job.jobType !== "VERIFY_ODDS_COVERAGE" || !job.payload || typeof job.payload !== "object") return "—";
   const value = job.payload as Record<string, unknown>;
   return typeof value.checked === "number" && typeof value.remaining === "number" ? `${value.checked} checked; ${value.remaining} missing` : "—";

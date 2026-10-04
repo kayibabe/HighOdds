@@ -109,7 +109,7 @@ export async function loadUpcomingFunnel(now: Date) {
   const freshSince = new Date(now.getTime() - QUOTE_MAX_AGE_MINUTES * 60 * 1000);
   const [modelled, predicted, priced, freshPriced, ticketed] = ids.length === 0 ? [[], [], [], [], []] : await Promise.all([
     db.modelRun.findMany({ where: { competitionId: { in: competitionIds } }, distinct: ["competitionId"], select: { competitionId: true } }),
-    db.prediction.findMany({ where: { fixtureId: { in: ids } }, distinct: ["fixtureId"], select: { fixtureId: true } }),
+    db.prediction.findMany({ where: { stage: "SELECTION", fixtureId: { in: ids } }, distinct: ["fixtureId"], select: { fixtureId: true } }),
     db.oddsQuote.findMany({ where: { fixtureId: { in: ids }, bookmaker: { active: true }, market: { normalizedKey: { not: null } } }, distinct: ["fixtureId"], select: { fixtureId: true } }),
     db.oddsQuote.findMany({ where: { fixtureId: { in: ids }, capturedAt: { gte: freshSince }, bookmaker: { active: true }, market: { normalizedKey: { not: null } } }, distinct: ["fixtureId"], select: { fixtureId: true } }),
     db.ticketLeg.findMany({ where: { fixtureId: { in: ids }, ticketVersion: { successors: { none: {} } } }, distinct: ["fixtureId"], select: { fixtureId: true } })
@@ -182,7 +182,7 @@ export async function loadCalibration(range: DayRange) {
       JOIN "Fixture" f ON f."id" = p."fixtureId"
       JOIN "Market" m ON m."id" = p."marketId"
       JOIN "ModelRun" mr ON mr."id" = p."modelRunId"
-    WHERE f."status" = 'FINISHED' AND f."homeGoals" IS NOT NULL AND f."awayGoals" IS NOT NULL AND m."normalizedKey" IS NOT NULL
+    WHERE p."stage" = 'SELECTION' AND f."status" = 'FINISHED' AND f."homeGoals" IS NOT NULL AND f."awayGoals" IS NOT NULL AND m."normalizedKey" IS NOT NULL
       AND f."kickoff" >= ${start} AND f."kickoff" < ${end}
     ORDER BY p."fixtureId", p."marketId", p."selection", p."asOfAt" DESC`;
   const scored: ScoredPrediction[] = [];
@@ -271,7 +271,7 @@ export async function loadDailyModelPicks(day: string): Promise<DailyModelPick[]
       JOIN "Team" ht ON ht."id" = f."homeTeamId"
       JOIN "Team" at ON at."id" = f."awayTeamId"
       JOIN "Competition" c ON c."id" = f."competitionId"
-    WHERE f."status" = 'FINISHED' AND f."homeGoals" IS NOT NULL AND f."awayGoals" IS NOT NULL
+    WHERE p."stage" = 'SELECTION' AND f."status" = 'FINISHED' AND f."homeGoals" IS NOT NULL AND f."awayGoals" IS NOT NULL
       AND m."normalizedKey" IS NOT NULL AND f."kickoff" >= ${start} AND f."kickoff" < ${end}
       AND p."asOfAt" < f."kickoff" AND mr."trainedUntil" <= p."asOfAt"
     ORDER BY p."fixtureId", p."marketId", p."selection", p."asOfAt" DESC`;

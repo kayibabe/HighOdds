@@ -3,7 +3,7 @@
  * them), so the analysis page can never describe a different rule from the one that ran.
  */
 
-/** Predictions and tickets only consider fixtures kicking off within this many hours of the run. */
+/** Selection-window forecasts and tickets consider fixtures this many hours after the run. */
 export const SELECTION_WINDOW_HOURS = 20;
 
 /** Fixture discovery covers today and the following six Africa/Blantyre calendar days. */
@@ -16,6 +16,7 @@ export const DAILY_JOB_SCHEDULE = [
   { jobType: "INGEST_ODDS", utcTime: "05:30" },
   { jobType: "VERIFY_ODDS_COVERAGE", utcTime: "05:45" },
   { jobType: "PUBLISH_TICKETS", utcTime: "06:00" },
+  { jobType: "EVENING_FORECAST", utcTime: "20:00" },
   { jobType: "SETTLE_RESULTS", utcTime: "21:00" }
 ] as const;
 

@@ -15,6 +15,9 @@ describe("rolling fixture jobs", () => {
       "2026-10-03", "2026-10-04", "2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09", "2026-10-10"
     ]);
     expect(jobs.filter((job) => job.jobType === "PUBLISH_TICKETS")).toHaveLength(1);
+    const evening = jobs.find((job) => job.jobType === "EVENING_FORECAST");
+    expect(evening.runAfter.toISOString()).toBe("2026-10-04T20:00:00.000Z");
+    expect(evening.payload).toEqual({ targetDate: "2026-10-05" });
     expect(upsert.mock.calls.every(([args]) => Object.keys(args.update).length === 0)).toBe(true);
   });
   it("uses stable keys on retry but refreshes the overlapping dates the following day", async () => {
@@ -28,5 +31,6 @@ describe("rolling fixture jobs", () => {
     const next = upsert.mock.calls.map(([args]) => args.where.idempotencyKey);
     expect(next.every((key) => !first.includes(key))).toBe(true);
     expect(next).toContain("INGEST_FIXTURES:calendar-v1:2027-01-01:2027-01-07");
+    expect(upsert.mock.calls.find(([args]) => args.create.jobType === "EVENING_FORECAST")![0].create.payload).toEqual({ targetDate: "2027-01-02" });
   });
 });
