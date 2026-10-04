@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { forecastEvidence, highProbabilityPick, modelPickFilter, MODEL_PICK_FILTERS, probabilityThreshold, PROBABILITY_THRESHOLDS, type EvidenceForecast } from "../src/forecast-evidence.js";
+import { forecastEvidence, highProbabilityPick, historicalSweetSpot, modelPickFilter, MODEL_PICK_FILTERS, probabilityThreshold, PROBABILITY_THRESHOLDS, type EvidenceForecast } from "../src/forecast-evidence.js";
 
 const target = { fixtureId: "target", competitionId: "league", market: "TOTAL_GOALS", selection: "OVER_2_5",
   method: "poisson", probability: 0.75, forecastAt: new Date("2026-10-01") };
@@ -51,6 +51,17 @@ describe("daily high-probability picks", () => {
 });
 
 describe("forecast evidence", () => {
+  it("selects a conservative sweet spot while ignoring tiny cohorts", () => {
+    const rows = [
+      ...Array.from({ length: 48 }, (_, index) => ({ marketKey: "MATCH_WINNER", selection: "HOME", probability: 0.8, win: index < 40 })),
+      ...Array.from({ length: 49 }, () => ({ marketKey: "MATCH_WINNER", selection: "HOME", probability: 0.9, win: true }))
+    ];
+    const result = historicalSweetSpot(rows);
+    expect(result?.threshold).toBe(80);
+    expect(result?.matches).toBe(97);
+    expect(result?.wins).toBe(89);
+  });
+
   it("compares same selection and band, reporting wins, forecast mean and uncertainty", () => {
     const result = forecastEvidence([row, { ...row, fixtureId: "loss", probability: 0.78, hit: false }], target);
     expect(result.matches).toBe(2);

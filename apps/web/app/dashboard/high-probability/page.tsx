@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { db } from "@highodds/db";
 import { auth } from "../../../auth";
-import { blantyreDayBounds, blantyreToday, forecastEvidence, highProbabilityPick, legOutcome, parseIsoDay, probabilityThreshold, PROBABILITY_THRESHOLDS, type StoredPrediction } from "@highodds/core";
+import { blantyreDayBounds, blantyreToday, forecastEvidence, highProbabilityPick, historicalSweetSpot, legOutcome, parseIsoDay, probabilityThreshold, PROBABILITY_THRESHOLDS, type StoredPrediction } from "@highodds/core";
 import { LEG_OUTCOME_LABEL, selectionLabel, shortPickLabel } from "../../../lib/selection";
 import { loadForecastEvidence } from "../../../lib/forecast-evidence";
 import { DayNav, formatDay } from "../../date-nav";
@@ -38,6 +38,37 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const day = parseIsoDay(date) ?? today;
   const isToday = day === today;
   const localDay = blantyreDayBounds(day);
+  const historicalCutoff = blantyreDayBounds(today).start;
+
+  // Historical context is intentionally cut off at today's local midnight: only settled
+  // matches through yesterday can influence the recommendation shown above today's filters.
+  const historicalRows = await db.$queryRaw<Array<{
+    fixtureId: string; marketKey: string; selection: string; probability: number; asOfAt: Date;
+    trainedUntil: Date; kickoff: Date; status: string; homeGoals: number; awayGoals: number;
+  }>>`
+    SELECT p."fixtureId", m."normalizedKey" AS "marketKey", p."selection",
+      p."probability"::float8 AS "probability", p."asOfAt", mr."trainedUntil",
+      f."kickoff", f."status", f."homeGoals", f."awayGoals"
+    FROM "Prediction" p
+      JOIN "Fixture" f ON f."id" = p."fixtureId"
+      JOIN "Market" m ON m."id" = p."marketId"
+      JOIN "ModelRun" mr ON mr."id" = p."modelRunId"
+    WHERE f."status" = 'FINISHED' AND f."kickoff" < ${historicalCutoff}
+      AND f."homeGoals" IS NOT NULL AND f."awayGoals" IS NOT NULL
+      AND m."normalizedKey" IS NOT NULL AND p."asOfAt" < f."kickoff"
+      AND mr."trainedUntil" <= p."asOfAt"
+    ORDER BY p."fixtureId", p."asOfAt" DESC, p."id" ASC`;
+  const historicalByFixture = new Map<string, typeof historicalRows>();
+  for (const row of historicalRows) historicalByFixture.set(row.fixtureId, [...(historicalByFixture.get(row.fixtureId) ?? []), row]);
+  const historicalPicks = [...historicalByFixture.values()].flatMap((rows) => {
+    const first = rows[0];
+    if (!first) return [];
+    const pick = highProbabilityPick(rows.map((row) => ({ ...row, marketKey: row.marketKey, probability: Number(row.probability) })), first.kickoff, now, 0);
+    if (!pick) return [];
+    const outcome = legOutcome(pick.marketKey!, pick.selection, first);
+    return outcome === "WIN" || outcome === "LOSS" ? [{ marketKey: pick.marketKey!, selection: pick.selection, probability: pick.probability, win: outcome === "WIN" }] : [];
+  });
+  const sweetSpot = historicalSweetSpot(historicalPicks);
 
   const fixtures = await db.fixture.findMany({
       where: { kickoff: { gte: localDay.start, lt: localDay.end } },
@@ -119,6 +150,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <h1>High Probability Matches</h1>
       <DayNav basePath="/dashboard/high-probability" day={day} today={today} allowFuture params={{ minProbability: String(minimumPercent), pick: pickFilter.value, stake: simulatorStake.toFixed(2), ...(pricedOnly ? { pricedOnly: "1" } : {}) }} />
       <p className="page-intro">Compare model picks for <strong>{formatDay(day)}</strong> with historical calibration evidence.</p>
+      <p className="forecast-sweet-spot" role="status"><strong>{sweetSpot ? `Historical sweet spot: ${shortPickLabel(sweetSpot.marketKey, sweetSpot.selection)} at ${sweetSpot.threshold}%+ model probability — ${sweetSpot.wins}/${sweetSpot.matches} settled wins (${(sweetSpot.hitRate * 100).toFixed(1)}% hit rate).` : "Historical sweet spot: not enough settled results yet."}</strong> <span>Based on settled matches through yesterday; this is paper evidence, not a staking recommendation.</span></p>
 
       <section className="matches-section" aria-label={isToday ? "Today's high-probability matches" : `High-probability matches on ${formatDay(day)}`}>
         <form className="date-form probability-filter" action="/dashboard/high-probability" method="get">

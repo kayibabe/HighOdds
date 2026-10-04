@@ -77,3 +77,47 @@ export function forecastEvidence(rows: EvidenceForecast[], target: Pick<Evidence
     interval: centre === null || margin === null ? null : { lower: centre - margin, upper: centre + margin },
     gap: observed === null || predicted === null ? null : observed - predicted };
 }
+
+export interface HistoricalSweetSpotRow {
+  marketKey: string;
+  selection: string;
+  probability: number;
+  win: boolean;
+}
+
+export interface HistoricalSweetSpot {
+  marketKey: string;
+  selection: string;
+  threshold: number;
+  matches: number;
+  wins: number;
+  hitRate: number;
+  predicted: number;
+  interval: { lower: number; upper: number };
+}
+
+/**
+ * Finds a usable probability/selection combination from settled strongest picks.
+ * A minimum sample avoids promoting a tiny all-win cohort; Wilson lower bound ranks
+ * candidates conservatively, with hit rate and sample size as tie breakers.
+ */
+export function historicalSweetSpot(rows: HistoricalSweetSpotRow[], minimumSample = 50): HistoricalSweetSpot | null {
+  const candidates: HistoricalSweetSpot[] = [];
+  for (const selection of new Set(rows.map((row) => `${row.marketKey}\u0000${row.selection}`))) {
+    const [marketKey, selectionKey] = selection.split("\u0000");
+    for (const threshold of PROBABILITY_THRESHOLDS) {
+      const cohort = rows.filter((row) => row.marketKey === marketKey && row.selection === selectionKey && row.probability >= threshold / 100);
+      const matches = cohort.length;
+      if (matches < minimumSample) continue;
+      const wins = cohort.filter((row) => row.win).length;
+      const hitRate = wins / matches;
+      const predicted = cohort.reduce((sum, row) => sum + row.probability, 0) / matches;
+      const z = 1.96;
+      const denominator = 1 + z * z / matches;
+      const centre = (hitRate + z * z / (2 * matches)) / denominator;
+      const margin = z * Math.sqrt(hitRate * (1 - hitRate) / matches + z * z / (4 * matches * matches)) / denominator;
+      candidates.push({ marketKey, selection: selectionKey, threshold, matches, wins, hitRate, predicted, interval: { lower: centre - margin, upper: centre + margin } });
+    }
+  }
+  return candidates.sort((a, b) => b.interval.lower - a.interval.lower || b.hitRate - a.hitRate || b.threshold - a.threshold || b.matches - a.matches)[0] ?? null;
+}

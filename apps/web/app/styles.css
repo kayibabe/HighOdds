@@ -458,6 +458,9 @@ h2 { font-size: 1.25rem; line-height: 1.3; letter-spacing: -0.015em; margin: 30p
 .inline-checkbox input { width: auto; }
 .filter-summary { margin: 14px 0 0; color: var(--text2); font-size: 13px; }
 .filter-summary strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.forecast-sweet-spot { margin: 14px 0 18px; padding: 12px 14px; border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: var(--r); background: var(--accent-bg); color: var(--text2); font-size: 13px; }
+.forecast-sweet-spot strong { color: var(--text); }
+.forecast-sweet-spot span { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
 .matches-table td:first-child, .matches-table td:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* Fixture research workspace */
