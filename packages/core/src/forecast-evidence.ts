@@ -1,6 +1,19 @@
 import { strongestPrediction, type StoredPrediction } from "./settlement.js";
 
 export const PROBABILITY_THRESHOLDS = [50, 60, 70, 80, 90] as const;
+export const MODEL_PICK_FILTERS = [
+  { value: "ALL", label: "All model picks", market: null, selection: null },
+  { value: "OVER_2_5", label: "Over 2.5", market: "TOTAL_GOALS", selection: "OVER_2_5" },
+  { value: "UNDER_2_5", label: "Under 2.5", market: "TOTAL_GOALS", selection: "UNDER_2_5" },
+  { value: "HOME", label: "Home win", market: "MATCH_WINNER", selection: "HOME" },
+  { value: "DRAW", label: "Draw", market: "MATCH_WINNER", selection: "DRAW" },
+  { value: "AWAY", label: "Away win", market: "MATCH_WINNER", selection: "AWAY" },
+  { value: "BTTS_YES", label: "BTTS: Yes", market: "BTTS", selection: "YES" },
+  { value: "BTTS_NO", label: "BTTS: No", market: "BTTS", selection: "NO" }
+] as const;
+export function modelPickFilter(value: string | string[] | undefined) {
+  return MODEL_PICK_FILTERS.find((filter) => filter.value === value) ?? MODEL_PICK_FILTERS[0];
+}
 export function probabilityThreshold(value: string | string[] | undefined): number {
   const parsed = typeof value === "string" ? Number(value) : NaN;
   return PROBABILITY_THRESHOLDS.some((threshold) => threshold === parsed) ? parsed : 60;
@@ -8,12 +21,14 @@ export function probabilityThreshold(value: string | string[] | undefined): numb
 
 /** Preserve the newest eligible batch rather than selecting an older, more optimistic forecast. */
 export function highProbabilityPick<T extends StoredPrediction & { trainedUntil: Date }>(
-  predictions: T[], kickoff: Date, now: Date, minimumPercent: number
+  predictions: T[], kickoff: Date, now: Date, minimumPercent: number, filter = modelPickFilter(undefined)
 ): T | null {
   const eligible = predictions.filter((row) => row.asOfAt < kickoff && row.asOfAt <= now && row.trainedUntil <= row.asOfAt
     && Number.isFinite(row.probability) && row.probability >= 0 && row.probability <= 1);
   const pick = strongestPrediction(eligible, kickoff);
-  return pick && pick.probability >= minimumPercent / 100 ? eligible.find((row) => row === pick)! : null;
+  return pick && pick.probability >= minimumPercent / 100
+    && (filter.value === "ALL" || (pick.marketKey === filter.market && pick.selection === filter.selection))
+    ? eligible.find((row) => row === pick)! : null;
 }
 
 export interface EvidenceForecast {

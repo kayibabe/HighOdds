@@ -11,6 +11,7 @@ import { DayNav, formatDay } from "../date-nav";
 import TicketBoard from "./ticket-board";
 import TotalGoalsRule from "./total-goals-rule";
 import ModelPicks from "./model-picks";
+import { MODEL_PICK_FILTERS, modelPickFilter } from "@highodds/core";
 
 export const dynamic = "force-dynamic";
 
@@ -23,12 +24,13 @@ const BLANTYRE_RECEIVED = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Africa/Blantyre", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
 });
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ date?: string | string[]; minProbability?: string | string[] }> }) {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ date?: string | string[]; minProbability?: string | string[]; pick?: string | string[] }> }) {
   const session = await auth();
   if (!session?.user?.email) redirect("/signin");
 
-  const { date, minProbability } = await searchParams;
+  const { date, minProbability, pick: pickParam } = await searchParams;
   const minimumPercent = probabilityThreshold(minProbability);
+  const pickFilter = modelPickFilter(pickParam);
   // Ticket target dates are UTC days (matching the publish schedule); fixtures use the same day in Blantyre time.
   const now = new Date();
   const today = blantyreToday(now);
@@ -68,7 +70,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const legsByFixture = new Map<string, typeof ticketLegs>();
   for (const leg of ticketLegs) legsByFixture.set(leg.fixtureId, [...(legsByFixture.get(leg.fixtureId) ?? []), leg]);
   const modelPickFixtures = fixtures.flatMap((fixture) => {
-    const pick = highProbabilityPick(predictionsByFixture.get(fixture.id) ?? [], fixture.kickoff, now, minimumPercent);
+    const pick = highProbabilityPick(predictionsByFixture.get(fixture.id) ?? [], fixture.kickoff, now, minimumPercent, pickFilter);
     return pick ? [{ fixture, pick }] : [];
   });
   const evidenceRows = await loadForecastEvidence(modelPickFixtures.map(({ fixture, pick }) => ({
@@ -79,7 +81,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     <section>
       <p className="eyebrow">{isToday ? "TODAY'S RESEARCH" : "RESEARCH HISTORY"}</p>
       <h1>Today&apos;s research</h1>
-      <DayNav basePath="/dashboard" day={day} today={today} allowFuture params={{ minProbability: String(minimumPercent) }} />
+      <DayNav basePath="/dashboard" day={day} today={today} allowFuture params={{ minProbability: String(minimumPercent), pick: pickFilter.value }} />
       <p className="page-intro">Published paper tickets and high-probability model picks for <strong>{formatDay(day)}</strong>, with historical evidence alongside each forecast.</p>
       <p><a className="inline-action" href="#matches-title">View {modelPickFixtures.length} matches at {minimumPercent}% and above for {day} (Blantyre time) ↓</a></p>
 
@@ -96,10 +98,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <form className="date-form probability-filter" action="/dashboard" method="get">
           <label>Date <input type="date" name="date" defaultValue={day} required /></label>
           <label>Model probability <select name="minProbability" defaultValue={String(minimumPercent)}>{PROBABILITY_THRESHOLDS.map((threshold) => <option key={threshold} value={threshold}>{threshold}% and above</option>)}</select></label>
+          <label>Model pick <select name="pick" defaultValue={pickFilter.value}>{MODEL_PICK_FILTERS.map((filter) => <option key={filter.value} value={filter.value}>{filter.label}</option>)}</select></label>
           <button type="submit" className="date-go">Show matches</button>
         </form>
-        <p>{modelPickFixtures.length} matches at {minimumPercent}% and above. One strongest selection from each match&apos;s latest eligible pre-kickoff forecast batch. Times are Africa/Blantyre. These are research signals; probability alone does not qualify a paper ticket.</p>
-        {modelPickFixtures.length === 0 ? <div className="notice">No matches have an eligible model pick at {minimumPercent}% and above for {formatDay(day)}. Try a lower threshold or another date.</div> : (
+        <p>{modelPickFixtures.length} matches · {pickFilter.label} · {minimumPercent}% and above. One strongest selection from each match&apos;s latest eligible pre-kickoff forecast batch. The model-pick filter matches that strongest selection. Times are Africa/Blantyre. These are research signals; probability alone does not qualify a paper ticket.</p>
+        {modelPickFixtures.length === 0 ? <div className="notice">No matches have {pickFilter.value === "ALL" ? "an eligible model pick" : `${pickFilter.label} as their strongest model pick`} at {minimumPercent}% and above for {formatDay(day)}. Try another model pick, a lower threshold or another date.</div> : (
           <div className="matches-table-wrap">
             <table className="matches-table">
               <thead><tr><th>Time</th><th>Match</th><th>Competition</th><th>Status</th><th>Score</th><th>Model pick</th><th>Historical evidence</th><th>Ticket</th><th>Last received</th></tr></thead>

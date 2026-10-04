@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { forecastEvidence, highProbabilityPick, probabilityThreshold, PROBABILITY_THRESHOLDS, type EvidenceForecast } from "../src/forecast-evidence.js";
+import { forecastEvidence, highProbabilityPick, modelPickFilter, MODEL_PICK_FILTERS, probabilityThreshold, PROBABILITY_THRESHOLDS, type EvidenceForecast } from "../src/forecast-evidence.js";
 
 const target = { fixtureId: "target", competitionId: "league", market: "TOTAL_GOALS", selection: "OVER_2_5",
   method: "poisson", probability: 0.75, forecastAt: new Date("2026-10-01") };
@@ -32,6 +32,21 @@ describe("daily high-probability picks", () => {
   it("accepts only supported filter values and defaults to 60", () => {
     for (const threshold of PROBABILITY_THRESHOLDS) expect(probabilityThreshold(String(threshold))).toBe(threshold);
     for (const invalid of [undefined, "75", "bad", ["90", "50"]]) expect(probabilityThreshold(invalid)).toBe(60);
+  });
+  it("filters the strongest model pick and does not substitute a weaker selection", () => {
+    const stronger = { ...pick, marketKey: "BTTS", selection: "YES", probability: 0.85 };
+    expect(highProbabilityPick([pick, stronger], kickoff, now, 60, modelPickFilter("OVER_2_5"))).toBeNull();
+    expect(highProbabilityPick([pick, stronger], kickoff, now, 60, modelPickFilter("BTTS_YES"))).toBe(stronger);
+    expect(highProbabilityPick([pick], kickoff, now, 70, modelPickFilter("OVER_2_5"))).toBe(pick);
+    expect(highProbabilityPick([pick], kickoff, now, 80, modelPickFilter("OVER_2_5"))).toBeNull();
+  });
+  it("matches both market and selection for each filter and safely defaults to all", () => {
+    for (const filter of MODEL_PICK_FILTERS.filter((item) => item.value !== "ALL")) {
+      const matching = { ...pick, marketKey: filter.market, selection: filter.selection };
+      expect(highProbabilityPick([matching], kickoff, now, 60, modelPickFilter(filter.value))).toBe(matching);
+      expect(highProbabilityPick([{ ...matching, marketKey: "OTHER" }], kickoff, now, 60, modelPickFilter(filter.value))).toBeNull();
+    }
+    for (const invalid of [undefined, "bad", ["OVER_2_5", "HOME"]]) expect(modelPickFilter(invalid).value).toBe("ALL");
   });
 });
 
