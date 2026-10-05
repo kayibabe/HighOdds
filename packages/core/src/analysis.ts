@@ -99,6 +99,12 @@ export interface CalibrationBucket {
   observedRate: number | null;
 }
 
+export interface SelectionProbabilityCalibration extends CalibrationBucket {
+  market: string;
+  selection: string;
+  exploratory: boolean;
+}
+
 /** Reliability table: forecasts binned by probability; a calibrated model has observedRate ≈ meanPredicted. */
 export function calibrationBuckets(rows: ScoredPrediction[], bucketCount = 10): CalibrationBucket[] {
   const buckets = Array.from({ length: bucketCount }, (_, index) => ({ lower: index / bucketCount, upper: (index + 1) / bucketCount, rows: [] as ScoredPrediction[] }));
@@ -111,6 +117,20 @@ export function calibrationBuckets(rows: ScoredPrediction[], bucketCount = 10): 
     meanPredicted: mean(bucket.rows.map((row) => row.probability)),
     observedRate: bucket.rows.length === 0 ? null : bucket.rows.filter((row) => row.hit).length / bucket.rows.length
   }));
+}
+
+/** Reliability buckets kept separate by market and selection, so unlike markets are not pooled. */
+export function calibrationBySelectionProbability(rows: ScoredPrediction[], bucketCount = 5, exploratoryBelow = 30): SelectionProbabilityCalibration[] {
+  return [...groupBy(rows, (row) => `${row.marketKey}\u0000${row.selection}`).entries()]
+    .flatMap(([key, group]) => {
+      const separator = key.indexOf("\u0000");
+      const market = key.slice(0, separator);
+      const selection = key.slice(separator + 1);
+      return calibrationBuckets(group, bucketCount)
+        .filter((bucket) => bucket.predictions > 0)
+        .map((bucket) => ({ ...bucket, market, selection, exploratory: bucket.predictions < exploratoryBelow }));
+    })
+    .sort((a, b) => a.market.localeCompare(b.market) || a.selection.localeCompare(b.selection) || a.lower - b.lower);
 }
 
 /** The market's highest-probability selection for one fixture, with the closing price it could have been backed at. */

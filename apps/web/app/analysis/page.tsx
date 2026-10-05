@@ -383,6 +383,22 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
           <p className="meta">Bias is mean predicted minus observed rate, in percentage points. Gaps of 3 pp or more are labelled.</p>
 
           <details className="analysis-details">
+            <summary>Probability calibration by market and selection</summary>
+            <p className="meta">Five probability bands are evaluated separately for each selection. Cohorts below 30 forecasts are exploratory and are not promotion evidence.</p>
+            <div className="matches-table-wrap">
+              <table className="analysis-table">
+                <caption>Walk-forward reliability by selection and probability band</caption>
+                <thead><tr><th scope="col">Market</th><th scope="col">Selection</th><th scope="col">Band</th><th scope="col">Forecasts</th><th scope="col">Predicted</th><th scope="col">Observed</th><th scope="col">Gap</th><th scope="col">Evidence</th></tr></thead>
+                <tbody>{calibration.bySelectionProbability.map((row) => <tr key={`${row.market}-${row.selection}-${row.lower}`} className={row.exploratory ? "attention" : undefined}>
+                  <th scope="row">{label(row.market)}</th><td>{label(row.selection)}</td><td>{pct(row.lower, 0)}–{pct(row.upper, 0)}</td>
+                  <td className="num">{count(row.predictions)}</td><td className="num">{pct(row.meanPredicted)}</td><td className="num">{pct(row.observedRate)}</td>
+                  <td className="num">{row.meanPredicted === null || row.observedRate === null ? "—" : signedPp(row.observedRate - row.meanPredicted)}</td><td>{row.exploratory ? "Exploratory" : "30+ forecasts"}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+          </details>
+
+          <details className="analysis-details">
             <summary>Calibration by competition and selection</summary>
             <div className="matches-table-wrap">
               <table className="analysis-table">

@@ -1,6 +1,6 @@
 import { db } from "@highodds/db";
 import {
-  blantyreDayBounds, calibrationBuckets, calibrationByCompetitionSelection, calibrationByMarket, calibrationBySelection, displayLegOutcome, filterPicks, median, modelPicks,
+  blantyreDayBounds, calibrationBuckets, calibrationByCompetitionSelection, calibrationByMarket, calibrationBySelection, calibrationBySelectionProbability, displayLegOutcome, filterPicks, median, modelPicks,
   parseSettlementEvidence, QUOTE_MAX_AGE_MINUTES, resolveSelection, SELECTION_WINDOW_HOURS, summarizeCandidateUniverse, summarizeLegs, summarizePicks, summarizeQuoteCadence, summarizeTiers, utcDate,
   type CandidateUniverseInput, type DayRange, type LegSummaryInput, type PickFilter, type ScoredPrediction, type TicketOutcome
 } from "@highodds/core";
@@ -205,7 +205,8 @@ export async function loadCalibration(range: DayRange) {
     byMarket: calibrationByMarket(scored),
     bySelection: calibrationBySelection(scored),
     byCompetitionSelection: calibrationByCompetitionSelection(scored),
-    buckets: calibrationBuckets(scored)
+    buckets: calibrationBuckets(scored),
+    bySelectionProbability: calibrationBySelectionProbability(scored)
   };
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  calibrationBuckets, calibrationByCompetitionSelection, calibrationByMarket, calibrationBySelection, filterPicks, isPickFilterActive, median, modelPicks, NO_PICK_FILTER,
+  calibrationBuckets, calibrationByCompetitionSelection, calibrationByMarket, calibrationBySelection, calibrationBySelectionProbability, filterPicks, isPickFilterActive, median, modelPicks, NO_PICK_FILTER,
   parsePickFilter, summarizeCandidateUniverse, summarizeLegs, summarizePicks, summarizeQuoteCadence, summarizeTiers,
   type ModelPick, type ScoredPrediction
 } from "../src/analysis.js";
@@ -201,6 +201,20 @@ describe("calibrationByCompetitionSelection", () => {
     expect(result).toEqual(expect.arrayContaining([
       expect.objectContaining({ competition: "League A", market: "MATCH_WINNER", selection: "HOME", predictions: 1, exploratory: true }),
       expect.objectContaining({ competition: "League B", market: "MATCH_WINNER", selection: "AWAY", predictions: 1, exploratory: true })
+    ]));
+  });
+});
+
+describe("calibrationBySelectionProbability", () => {
+  it("keeps probability buckets separate by selection and marks sparse buckets exploratory", () => {
+    const result = calibrationBySelectionProbability([
+      { fixtureId: "f1", marketKey: "MATCH_WINNER", selection: "AWAY", probability: 0.35, hit: false },
+      { fixtureId: "f2", marketKey: "MATCH_WINNER", selection: "AWAY", probability: 0.45, hit: true },
+      { fixtureId: "f3", marketKey: "MATCH_WINNER", selection: "HOME", probability: 0.85, hit: true }
+    ], 5, 2);
+    expect(result).toEqual(expect.arrayContaining([
+      expect.objectContaining({ market: "MATCH_WINNER", selection: "AWAY", lower: 0.2, upper: 0.4, predictions: 1, exploratory: true }),
+      expect.objectContaining({ market: "MATCH_WINNER", selection: "HOME", lower: 0.8, upper: 1, predictions: 1, exploratory: true })
     ]));
   });
 });
