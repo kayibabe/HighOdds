@@ -1,8 +1,8 @@
 import { db } from "@highodds/db";
 import {
   blantyreDayBounds, calibrationBuckets, calibrationByMarket, calibrationBySelection, displayLegOutcome, filterPicks, median, modelPicks,
-  parseSettlementEvidence, QUOTE_MAX_AGE_MINUTES, resolveSelection, SELECTION_WINDOW_HOURS, summarizeLegs, summarizePicks, summarizeTiers, utcDate,
-  type DayRange, type LegSummaryInput, type PickFilter, type ScoredPrediction, type TicketOutcome
+  parseSettlementEvidence, QUOTE_MAX_AGE_MINUTES, resolveSelection, SELECTION_WINDOW_HOURS, summarizeCandidateUniverse, summarizeLegs, summarizePicks, summarizeTiers, utcDate,
+  type CandidateUniverseInput, type DayRange, type LegSummaryInput, type PickFilter, type ScoredPrediction, type TicketOutcome
 } from "@highodds/core";
 import { averageClv } from "./clv";
 import { decisionLegs } from "./tickets";
@@ -323,11 +323,32 @@ export async function loadTicketPerformance(range: DayRange) {
     };
   });
   const settledIds = tickets.filter((ticket) => ticket.settlements[0] && ticket.settlements[0].outcome !== "PENDING").map((ticket) => ticket.id);
+  const snapshotRunIds = [...new Set(tickets.flatMap((ticket) => ticket.candidateSnapshotRunId ? [ticket.candidateSnapshotRunId] : []))];
+  const snapshots = snapshotRunIds.length === 0 ? [] : await db.candidateSnapshot.findMany({
+    where: { runId: { in: snapshotRunIds } },
+    include: { fixture: { include: { competition: true } }, quote: { include: { bookmaker: true } } }
+  });
+  const candidateUniverseRows: CandidateUniverseInput[] = snapshots.map((snapshot) => {
+    const fixture = snapshot.fixture;
+    const resolved = fixture.status === "FINISHED" && fixture.homeGoals !== null && fixture.awayGoals !== null
+      ? resolveSelection(snapshot.marketKey, snapshot.selection, fixture.homeGoals, fixture.awayGoals)
+      : null;
+    return {
+      marketKey: snapshot.marketKey, selection: snapshot.selection, decimalOdds: Number(snapshot.decimalOdds),
+      probability: Number(snapshot.modelProbability), confidenceScore: snapshot.confidenceScore,
+      competition: fixture.competition.name, bookmaker: snapshot.quote.bookmaker.name,
+      baseEligibilityReason: snapshot.baseEligibilityReason, selected: snapshot.selected,
+      ticketTier: snapshot.ticketTier, confidenceThreshold: snapshot.confidenceThreshold,
+      outcome: fixture.status === "POSTPONED" || fixture.status === "CANCELLED" ? "VOID"
+        : fixture.status === "FINISHED" ? (resolved ?? "UNRESOLVED") : "PENDING"
+    };
+  });
   return {
     tickets: tickets.length,
     tiers: summarizeTiers(tierInputs),
     markets: summarizeLegs(legs),
     thresholds: [...thresholds.entries()].sort((a, b) => b[0] - a[0]).map(([threshold, count]) => ({ threshold, count })),
-    clv: await averageClv(settledIds)
+    clv: await averageClv(settledIds),
+    candidateUniverse: { snapshotRuns: snapshotRunIds.length, ...summarizeCandidateUniverse(candidateUniverseRows) }
   };
 }

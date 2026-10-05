@@ -341,3 +341,105 @@ export function summarizeLegs(legs: LegSummaryInput[]): MarketLegPerformance[] {
   const markets = [...new Set(legs.map((leg) => leg.marketKey))].sort();
   return [...markets.map((market) => legPerformance(market, legs.filter((leg) => leg.marketKey === market))), legPerformance("ALL", legs)];
 }
+
+/** A prospectively captured candidate and its eventual fixture result, if known. */
+export interface CandidateUniverseInput {
+  marketKey: string;
+  selection: string;
+  decimalOdds: number;
+  probability: number;
+  confidenceScore: number;
+  competition: string;
+  bookmaker: string;
+  /** null means the candidate passed the leg-level gates at publication time. */
+  baseEligibilityReason: string | null;
+  selected: boolean;
+  ticketTier: string | null;
+  confidenceThreshold: number | null;
+  outcome: "WIN" | "LOSS" | "VOID" | "PENDING" | "UNRESOLVED";
+}
+
+export interface CandidateCohortPerformance {
+  group: string;
+  cohort: "Selected" | "Eligible not selected";
+  legs: number;
+  wins: number;
+  losses: number;
+  pending: number;
+  hitRate: number | null;
+  expectedHitRate: number | null;
+  profitUnits: number;
+  roiPercent: number | null;
+}
+
+export interface CandidateUniverseSummary {
+  captured: number;
+  eligible: number;
+  selected: number;
+  selectedWithoutEligibility: number;
+  cohorts: CandidateCohortPerformance[];
+  byMarket: CandidateCohortPerformance[];
+  byOddsBand: CandidateCohortPerformance[];
+  byProbabilityBand: CandidateCohortPerformance[];
+  byCompetition: CandidateCohortPerformance[];
+  byBookmaker: CandidateCohortPerformance[];
+  byConfidence: CandidateCohortPerformance[];
+  byTier: CandidateCohortPerformance[];
+}
+
+function candidateCohortPerformance(group: string, cohort: CandidateCohortPerformance["cohort"], rows: CandidateUniverseInput[]): CandidateCohortPerformance {
+  const decided = rows.filter((row) => row.outcome === "WIN" || row.outcome === "LOSS" || row.outcome === "UNRESOLVED");
+  const wins = decided.filter((row) => row.outcome === "WIN").length;
+  const losses = decided.length - wins;
+  const profitUnits = decided.reduce((sum, row) => sum + (row.outcome === "WIN" ? row.decimalOdds - 1 : -1), 0);
+  return {
+    group, cohort, legs: rows.length, wins, losses,
+    pending: rows.filter((row) => row.outcome === "PENDING").length,
+    hitRate: decided.length === 0 ? null : wins / decided.length,
+    expectedHitRate: mean(decided.map((row) => row.probability)),
+    profitUnits,
+    roiPercent: decided.length === 0 ? null : profitUnits / decided.length * 100
+  };
+}
+
+const oddsBand = (odds: number) => odds < 2 ? "1.80–1.99" : odds < 2.5 ? "2.00–2.49" : odds < 3 ? "2.50–2.99" : "≥ 3.00";
+const probabilityBand = (probability: number) => probability < 0.5 ? "< 50%" : probability < 0.6 ? "50–59%" : probability < 0.7 ? "60–69%" : "≥ 70%";
+const candidateCohort = (row: CandidateUniverseInput): CandidateCohortPerformance["cohort"] | null =>
+  row.selected ? "Selected" : row.baseEligibilityReason === null ? "Eligible not selected" : null;
+
+function summarizeCandidateDimension(rows: CandidateUniverseInput[], groupFor: (row: CandidateUniverseInput) => string): CandidateCohortPerformance[] {
+  const groups = new Map<string, CandidateUniverseInput[]>();
+  for (const row of rows) {
+    const cohort = candidateCohort(row);
+    if (!cohort) continue;
+    const group = `${groupFor(row)}\u0000${cohort}`;
+    const values = groups.get(group) ?? [];
+    values.push(row); groups.set(group, values);
+  }
+  return [...groups.entries()].map(([key, values]) => {
+    const [group, cohort] = key.split("\u0000") as [string, CandidateCohortPerformance["cohort"]];
+    return candidateCohortPerformance(group, cohort, values);
+  }).sort((a, b) => a.group.localeCompare(b.group) || a.cohort.localeCompare(b.cohort));
+}
+
+/**
+ * Compares published legs with every other candidate that passed the same leg-level gates at the
+ * moment a ticket was published. This is descriptive paper research, not a promotion rule.
+ */
+export function summarizeCandidateUniverse(rows: CandidateUniverseInput[]): CandidateUniverseSummary {
+  const cohorts = summarizeCandidateDimension(rows, () => "ALL");
+  return {
+    captured: rows.length,
+    eligible: rows.filter((row) => row.baseEligibilityReason === null).length,
+    selected: rows.filter((row) => row.selected).length,
+    selectedWithoutEligibility: rows.filter((row) => row.selected && row.baseEligibilityReason !== null).length,
+    cohorts,
+    byMarket: summarizeCandidateDimension(rows, (row) => `${row.marketKey}:${row.selection}`),
+    byOddsBand: summarizeCandidateDimension(rows, (row) => oddsBand(row.decimalOdds)),
+    byProbabilityBand: summarizeCandidateDimension(rows, (row) => probabilityBand(row.probability)),
+    byCompetition: summarizeCandidateDimension(rows, (row) => row.competition),
+    byBookmaker: summarizeCandidateDimension(rows, (row) => row.bookmaker),
+    byConfidence: summarizeCandidateDimension(rows, (row) => row.confidenceScore >= 70 ? "≥ 70" : row.confidenceScore >= 65 ? "65–69" : row.confidenceScore >= 60 ? "60–64" : "< 60"),
+    byTier: summarizeCandidateDimension(rows, (row) => row.selected ? `${row.ticketTier ?? "Unknown"} @ ${row.confidenceThreshold ?? "?"}` : "Not selected")
+  };
+}

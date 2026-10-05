@@ -126,3 +126,16 @@ auto-detected until then and mirrors the web settings; after that date it is ign
 Tickets are paper-only. A ticket version is append-only, uses one bookmaker, and cannot be changed after
 publication; pre-kickoff corrections create a successor version. Historical results support calibration
 only. ROI and CLV require locally captured pre-kickoff quotes.
+
+The ticket-selection layer has an additional prospective safeguard for `MATCH_WINNER` away wins at captured
+prices from 1.80 (inclusive) to 2.00 (exclusive): the model probability must exceed the source price's implied
+probability by at least 5 percentage points. This does not modify model probabilities or the model/market
+agreement thresholds, and it is not evidence of profitability; published decision snapshots retain the applied
+model-implied edge and guard label for later point-in-time review.
+
+Every newly published ticket also records an immutable candidate-universe snapshot: all contemporaneous
+prediction-plus-complete-market candidates, their captured quotes, probabilities, confidence, conservative EV,
+leg-level eligibility result and whether they were selected. The admin Analysis page compares selected legs with
+eligible-but-not-selected legs at their captured prices. It starts prospectively after the migration; historic
+tickets are not reconstructed from later data, and the comparison is leg-level paper research rather than a
+claim that a different accumulator would have won.

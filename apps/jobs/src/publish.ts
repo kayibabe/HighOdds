@@ -1,5 +1,5 @@
 import { db } from "@highodds/db";
-import { buildTicketsAround, conservativeExpectedValue, devigProbability, quoteIsFresh, SELECTION_WINDOW_HOURS, type CandidateLeg, type SupportedMarket, type TicketTier } from "@highodds/core";
+import { buildTicketsAround, conservativeExpectedValue, devigProbability, isGuardedAwayWin, legEligibility, modelImpliedEdge, quoteIsFresh, SELECTION_WINDOW_HOURS, type CandidateLeg, type SupportedMarket, type TicketTier } from "@highodds/core";
 import { generatePredictions } from "./predict.js";
 
 const SELECTION_WINDOW_MS = SELECTION_WINDOW_HOURS * 60 * 60 * 1000;
@@ -7,6 +7,8 @@ const SELECTION_WINDOW_MS = SELECTION_WINDOW_HOURS * 60 * 60 * 1000;
 const MARKET_OUTCOME_COUNT: Record<SupportedMarket, number> = { MATCH_WINNER: 3, TOTAL_GOALS: 2, BTTS: 2 };
 const TOTAL_GOALS_RULE_KEY = "TOTAL_GOALS_ODDS_1_80_V1";
 const TOTAL_GOALS_RULE_MIN_ODDS = 1.8;
+/** Bump only when the candidate construction or selection policy changes materially. */
+const CANDIDATE_SNAPSHOT_POLICY_VERSION = "acca-candidate-universe-v1";
 
 export interface PublishResult { published: number; predicted: number; predictionsSkipped: number; }
 
@@ -103,7 +105,9 @@ export async function publishTickets(now: Date): Promise<PublishResult> {
     }
   }
 
-  const candidates: CandidateLeg[] = [];
+  // quoteId is retained only until the immutable candidate-universe snapshot is written. The core
+  // selector sees the normal CandidateLeg shape and cannot depend on database identifiers.
+  const candidates: Array<CandidateLeg & { quoteId: string }> = [];
   for (const quote of freshQuotes) {
     const marketKey = marketKeyById.get(quote.marketId);
     if (!marketKey) continue;
@@ -121,7 +125,7 @@ export async function publishTickets(now: Date): Promise<PublishResult> {
       bookmakerId: quote.bookmakerId, fixtureId: quote.fixtureId, market: marketKey, selection: quote.selection,
       decimalOdds, capturedAt: quote.capturedAt, modelProbability, consensusProbability,
       conservativeExpectedValue: conservativeExpectedValue(modelProbability, decimalOdds), confidenceScore: Math.round(agreement * 100),
-      leagueId: fixture.competitionId, kickoff: fixture.kickoff
+      leagueId: fixture.competitionId, kickoff: fixture.kickoff, quoteId: quote.id
     });
   }
   if (candidates.length === 0) return result(0);
@@ -139,6 +143,38 @@ export async function publishTickets(now: Date): Promise<PublishResult> {
   const drafts = buildTicketsAround(candidates, bookmakerPriority, now, [...openByTier.values()].map((version) => ({
     tier: version.tier, locked: version.lockAt <= now, fixtureIds: version.legs.map((leg) => leg.fixtureId)
   })));
+  if (drafts.length === 0) return result(0);
+
+  // This is the prospective comparison denominator. It includes every candidate that had a
+  // contemporaneous prediction, complete de-vigged market and fresh captured quote—not just the
+  // legs ultimately selected for a ticket. It is intentionally only written alongside a real
+  // publication decision; old tickets are not backfilled from hindsight data.
+  const selected = new Map<string, { tier: TicketTier["key"]; confidenceThreshold: number }>();
+  const candidateKey = (candidate: Pick<CandidateLeg, "fixtureId" | "bookmakerId" | "market" | "selection">) =>
+    `${candidate.fixtureId}:${candidate.bookmakerId}:${candidate.market}:${candidate.selection}`;
+  for (const draft of drafts) for (const leg of draft.legs) {
+    selected.set(candidateKey(leg), { tier: draft.tier.key, confidenceThreshold: draft.confidenceThreshold });
+  }
+  const snapshot = await db.candidateSnapshotRun.create({
+    data: {
+      targetDate, capturedAt: now, policyVersion: CANDIDATE_SNAPSHOT_POLICY_VERSION,
+      candidates: {
+        create: candidates.map((candidate) => {
+          const selection = selected.get(candidateKey(candidate));
+          return {
+            fixtureId: candidate.fixtureId, quoteId: candidate.quoteId, marketKey: candidate.market, selection: candidate.selection,
+            decimalOdds: candidate.decimalOdds, modelProbability: candidate.modelProbability,
+            consensusProbability: candidate.consensusProbability, confidenceScore: candidate.confidenceScore,
+            conservativeExpectedValue: candidate.conservativeExpectedValue,
+            baseEligibilityReason: legEligibility(candidate, now).reason ?? null,
+            selected: selection !== undefined, ticketTier: selection?.tier ?? null,
+            confidenceThreshold: selection?.confidenceThreshold ?? null
+          };
+        })
+      }
+    },
+    select: { id: true }
+  });
   let published = 0;
 
   for (const draft of drafts) {
@@ -150,8 +186,13 @@ export async function publishTickets(now: Date): Promise<PublishResult> {
         data: {
           targetDate, tier: draft.tier.key, bookmakerId: draft.bookmakerId, combinedOdds: draft.combinedOdds,
           confidenceThreshold: draft.confidenceThreshold, relaxed: draft.relaxed, lockAt,
-          supersedesId: open?.id ?? null,
-          decision: draft.legs.map((leg) => ({ fixtureId: leg.fixtureId, market: leg.market, selection: leg.selection, decimalOdds: leg.decimalOdds, modelProbability: leg.modelProbability, consensusProbability: leg.consensusProbability, confidenceScore: leg.confidenceScore })) as unknown as object
+          supersedesId: open?.id ?? null, candidateSnapshotRunId: snapshot.id,
+          decision: draft.legs.map((leg) => ({
+            fixtureId: leg.fixtureId, market: leg.market, selection: leg.selection, decimalOdds: leg.decimalOdds,
+            modelProbability: leg.modelProbability, consensusProbability: leg.consensusProbability, confidenceScore: leg.confidenceScore,
+            modelImpliedEdge: modelImpliedEdge(leg),
+            selectionGuard: isGuardedAwayWin(leg) ? "AWAY_WIN_1_80_1_99_MIN_MODEL_EDGE_5PP" : null
+          })) as unknown as object
         }
       });
       for (const leg of draft.legs) {

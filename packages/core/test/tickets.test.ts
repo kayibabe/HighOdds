@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTickets, buildTicketsAround } from "../src/tickets.js";
+import { AWAY_WIN_GUARD_MIN_MODEL_IMPLIED_EDGE, buildTickets, buildTicketsAround, legEligibility, modelImpliedEdge } from "../src/tickets.js";
 import type { CandidateLeg, TicketDraft } from "../src/types.js";
 
 const now = new Date("2026-09-20T06:00:00Z");
@@ -7,6 +7,25 @@ function leg(fixtureId: string, odds: number, overrides: Partial<CandidateLeg> =
 const fixturesOf = (drafts: TicketDraft[]) => drafts.flatMap((draft) => draft.legs.map((item) => item.fixtureId));
 
 describe("ticket construction", () => {
+  it("gates low model-implied edge only for away wins in the 1.80-1.99 band", () => {
+    const guarded = leg("away-low-edge", 1.9, { selection: "AWAY", modelProbability: 0.55 });
+    const unguardedHome = leg("home-low-edge", 1.9, { selection: "HOME", modelProbability: 0.55 });
+    const outsideBand = leg("away-outside-band", 2, { selection: "AWAY", modelProbability: 0.55 });
+
+    expect(modelImpliedEdge(guarded)).toBeCloseTo(0.55 - 1 / 1.9, 8);
+    expect(modelImpliedEdge(guarded)).toBeLessThan(AWAY_WIN_GUARD_MIN_MODEL_IMPLIED_EDGE);
+    expect(legEligibility(guarded, now)).toEqual({ eligible: false, reason: "AWAY_WIN_1_80_1_99_MODEL_EDGE_BELOW_5PP" });
+    expect(legEligibility(unguardedHome, now)).toEqual({ eligible: true });
+    expect(legEligibility(outsideBand, now)).toEqual({ eligible: true });
+  });
+
+  it("allows a guarded away win when its model-implied edge clears five points", () => {
+    const guarded = leg("away-high-edge", 1.95, { selection: "AWAY", modelProbability: 0.57 });
+
+    expect(modelImpliedEdge(guarded)).toBeGreaterThan(AWAY_WIN_GUARD_MIN_MODEL_IMPLIED_EDGE);
+    expect(legEligibility(guarded, now)).toEqual({ eligible: true });
+  });
+
   it("builds same-bookmaker, one-fixture-per-leg tickets", () => {
     const drafts = buildTickets([leg("a", 2), leg("b", 2.5), leg("c", 2.2), leg("d", 2.1)], ["preferred"], now);
     const standard = drafts.find((draft) => draft.tier.key === "STANDARD");

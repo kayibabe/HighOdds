@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calibrationBuckets, calibrationByMarket, calibrationBySelection, filterPicks, isPickFilterActive, median, modelPicks, NO_PICK_FILTER,
-  parsePickFilter, summarizeLegs, summarizePicks, summarizeTiers,
+  parsePickFilter, summarizeCandidateUniverse, summarizeLegs, summarizePicks, summarizeTiers,
   type ModelPick, type ScoredPrediction
 } from "../src/analysis.js";
 
@@ -189,5 +189,25 @@ describe("summarizeLegs", () => {
     expect(matchWinner!.avgEdgePercent).toBeCloseTo(((0.55 * 2 - 1) + (0.45 * 2.5 - 1)) / 2 * 100, 10);
     expect(matchWinner!.avgConfidence).toBe(80);
     expect(all!.legs).toBe(3);
+  });
+});
+
+describe("summarizeCandidateUniverse", () => {
+  it("compares selected legs with eligible non-selected candidates without treating rejected rows as a cohort", () => {
+    const summary = summarizeCandidateUniverse([
+      { marketKey: "TOTAL_GOALS", selection: "OVER_2_5", decimalOdds: 1.9, probability: 0.6, confidenceScore: 72, competition: "A", bookmaker: "Book", baseEligibilityReason: null, selected: true, ticketTier: "STANDARD", confidenceThreshold: 70, outcome: "WIN" },
+      { marketKey: "TOTAL_GOALS", selection: "UNDER_2_5", decimalOdds: 2.1, probability: 0.55, confidenceScore: 68, competition: "A", bookmaker: "Book", baseEligibilityReason: null, selected: false, ticketTier: null, confidenceThreshold: null, outcome: "LOSS" },
+      { marketKey: "BTTS", selection: "YES", decimalOdds: 1.7, probability: 0.6, confidenceScore: 75, competition: "B", bookmaker: "Book", baseEligibilityReason: "ODDS_BELOW_1_80", selected: false, ticketTier: null, confidenceThreshold: null, outcome: "WIN" }
+    ]);
+    expect(summary).toMatchObject({ captured: 3, eligible: 2, selected: 1, selectedWithoutEligibility: 0 });
+    const selected = summary.cohorts.find((row) => row.cohort === "Selected")!;
+    const unselected = summary.cohorts.find((row) => row.cohort === "Eligible not selected")!;
+    expect(selected).toMatchObject({ legs: 1, wins: 1 });
+    expect(selected.roiPercent).toBeCloseTo(90, 10);
+    expect(unselected).toMatchObject({ legs: 1, losses: 1, roiPercent: -100 });
+    expect(summary.byTier).toEqual(expect.arrayContaining([
+      expect.objectContaining({ group: "STANDARD @ 70", cohort: "Selected" }),
+      expect.objectContaining({ group: "Not selected", cohort: "Eligible not selected" })
+    ]));
   });
 });

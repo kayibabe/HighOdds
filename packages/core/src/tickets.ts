@@ -1,5 +1,5 @@
 import type { CandidateLeg, EligibilityResult, TicketDraft, TicketTier } from "./types.js";
-import { MIN_LEG_ODDS, quoteIsFresh } from "./odds.js";
+import { impliedProbability, MIN_LEG_ODDS, quoteIsFresh } from "./odds.js";
 
 export const TICKET_TIERS: TicketTier[] = [
   { key: "STANDARD", minOdds: 5, maxOddsExclusive: 10 },
@@ -7,8 +7,31 @@ export const TICKET_TIERS: TicketTier[] = [
   { key: "HIGH", minOdds: 20, maxOddsExclusive: null }
 ];
 
+/**
+ * A narrow selection-layer safeguard for the price band under review.  This is deliberately
+ * independent of the model/market agreement score: it evaluates the selected quote's implied
+ * probability against the already-produced model probability.
+ *
+ * It is a prospective, paper-only control rather than evidence that this segment is profitable.
+ */
+export const AWAY_WIN_GUARD_MIN_ODDS = 1.8;
+export const AWAY_WIN_GUARD_MAX_ODDS_EXCLUSIVE = 2;
+export const AWAY_WIN_GUARD_MIN_MODEL_IMPLIED_EDGE = 0.05;
+
+export function modelImpliedEdge(leg: Pick<CandidateLeg, "modelProbability" | "decimalOdds">): number {
+  return leg.modelProbability - impliedProbability(leg.decimalOdds);
+}
+
+export function isGuardedAwayWin(leg: Pick<CandidateLeg, "market" | "selection" | "decimalOdds">): boolean {
+  return leg.market === "MATCH_WINNER" && leg.selection === "AWAY"
+    && leg.decimalOdds >= AWAY_WIN_GUARD_MIN_ODDS && leg.decimalOdds < AWAY_WIN_GUARD_MAX_ODDS_EXCLUSIVE;
+}
+
 export function legEligibility(leg: CandidateLeg, now: Date): EligibilityResult {
   if (leg.decimalOdds < MIN_LEG_ODDS) return { eligible: false, reason: "ODDS_BELOW_1_80" };
+  if (isGuardedAwayWin(leg) && modelImpliedEdge(leg) < AWAY_WIN_GUARD_MIN_MODEL_IMPLIED_EDGE) {
+    return { eligible: false, reason: "AWAY_WIN_1_80_1_99_MODEL_EDGE_BELOW_5PP" };
+  }
   if (leg.conservativeExpectedValue <= 0) return { eligible: false, reason: "NON_POSITIVE_CONSERVATIVE_EV" };
   if (!quoteIsFresh(leg, leg.kickoff, now)) return { eligible: false, reason: "STALE_OR_POST_KICKOFF_QUOTE" };
   return { eligible: true };

@@ -188,6 +188,7 @@ model Fixture {
   predictions Prediction[]
   ticketLegs  TicketLeg[]
   validationPicks ValidationPick[]
+  candidateSnapshots CandidateSnapshot[]
 
   @@index([kickoff, status])
   @@index([competitionId, kickoff])
@@ -227,6 +228,7 @@ model OddsQuote {
   bookmaker         Bookmaker @relation(fields: [bookmakerId], references: [id])
   market            Market   @relation(fields: [marketId], references: [id])
   validationPicks   ValidationPick[]
+  candidateSnapshots CandidateSnapshot[]
 
   @@index([fixtureId, capturedAt])
   @@index([bookmakerId, marketId, selection])
@@ -293,14 +295,58 @@ model TicketVersion {
   publishedAt   DateTime     @default(now())
   lockAt        DateTime
   supersedesId  String?
+  candidateSnapshotRunId String?
   decision      Json
   supersedes    TicketVersion? @relation("ticket_successors", fields: [supersedesId], references: [id])
   successors    TicketVersion[] @relation("ticket_successors")
   legs          TicketLeg[]
   settlements   Settlement[]
+  candidateSnapshotRun CandidateSnapshotRun? @relation(fields: [candidateSnapshotRunId], references: [id], onDelete: Restrict)
 
   @@index([targetDate, tier, publishedAt])
   @@index([lockAt])
+  @@index([candidateSnapshotRunId])
+}
+
+/// Immutable universe evaluated when one or more paper tickets were published. It separates the
+/// candidate universe from the subset selected into an accumulator, without changing tickets.
+model CandidateSnapshotRun {
+  id          String              @id @default(cuid())
+  targetDate  DateTime            @db.Date
+  capturedAt  DateTime
+  policyVersion String
+  candidates  CandidateSnapshot[]
+  ticketVersions TicketVersion[]
+  createdAt   DateTime            @default(now())
+
+  @@index([targetDate, capturedAt])
+}
+
+/// One exact quote/prediction candidate from a CandidateSnapshotRun. A null baseEligibilityReason
+/// means it cleared the leg-level price, EV, freshness and targeted safeguards at capture time.
+model CandidateSnapshot {
+  id                  String               @id @default(cuid())
+  runId               String
+  fixtureId           String
+  quoteId             String
+  marketKey           String
+  selection           String
+  decimalOdds         Decimal              @db.Decimal(10, 4)
+  modelProbability    Decimal              @db.Decimal(8, 6)
+  consensusProbability Decimal             @db.Decimal(8, 6)
+  confidenceScore     Int
+  conservativeExpectedValue Decimal        @db.Decimal(10, 6)
+  baseEligibilityReason String?
+  selected            Boolean              @default(false)
+  ticketTier          TicketTier?
+  confidenceThreshold Int?
+  run                 CandidateSnapshotRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+  fixture             Fixture              @relation(fields: [fixtureId], references: [id], onDelete: Restrict)
+  quote               OddsQuote            @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+
+  @@unique([runId, quoteId])
+  @@index([runId, selected])
+  @@index([fixtureId])
 }
 
 model TicketLeg {

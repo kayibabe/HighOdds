@@ -3,7 +3,7 @@ import {
   CONFIDENCE_THRESHOLDS, DAILY_JOB_SCHEDULE, DIXON_COLES_RHO, EV_HAIRCUT, EXPECTED_GOALS_FLOOR, HISTORY_LOOKBACK_DAYS, IPF_ITERATIONS,
   JOB_LEASE_MINUTES, JOB_RETRY_MINUTES, LEAGUE_MIN_MATCHES, MAX_LEGS_PER_LEAGUE, MIN_LEG_ODDS, MIN_TICKET_LEGS, MODEL_METHOD,
   isPickFilterActive, parsePickFilter, QUOTE_MAX_AGE_MINUTES, resolveDayRange, SCORELINE_MAX_GOALS, SELECTION_WINDOW_HOURS, TEAM_MIN_MATCHES,
-  TICKET_TIERS, utcToday, type CalibrationBucket, type DayRange, type PickFilter, type PickPerformance
+  TICKET_TIERS, utcToday, type CalibrationBucket, type CandidateCohortPerformance, type DayRange, type PickFilter, type PickPerformance
 } from "@highodds/core";
 import { auth } from "../../auth";
 import { loadCalibration, loadModelCoverage, loadModelPicks, loadPipelineHealth, loadTicketPerformance, loadUpcomingFunnel } from "../../lib/analysis";
@@ -36,7 +36,8 @@ const SECTIONS = [
   { id: "model", title: "Model coverage" },
   { id: "calibration", title: "Calibration" },
   { id: "picks", title: "Model picks" },
-  { id: "tickets", title: "Ticket performance" }
+  { id: "tickets", title: "Ticket performance" },
+  { id: "candidates", title: "Candidate universe" }
 ];
 
 type Parameter = { name: string; value: string; effect: string };
@@ -110,6 +111,25 @@ function PickTable({ caption, firstColumn, rows }: { caption: string; firstColum
         <td className="num">{count(row.valuePicks)}</td>
         <td className="num">{pct(row.valueHitRate)}</td>
         <td className={`num ${tone(row.valueRoiPercent)}`}>{roi(row.valueRoiPercent)}</td>
+      </tr>)}</tbody>
+    </table>
+  </div>;
+}
+
+function CandidateUniverseTable({ caption, firstColumn, rows }: { caption: string; firstColumn: string; rows: CandidateCohortPerformance[] }) {
+  return <div className="matches-table-wrap">
+    <table className="analysis-table">
+      <caption>{caption}</caption>
+      <thead><tr><th scope="col">{firstColumn}</th><th scope="col">Cohort</th><th scope="col">Legs</th><th scope="col">W / L / pending</th><th scope="col">Hit rate</th><th scope="col">Expected</th><th scope="col">Paper profit</th><th scope="col">Paper ROI</th></tr></thead>
+      <tbody>{rows.map((row) => <tr key={`${row.group}-${row.cohort}`} className={row.group === "ALL" ? "total" : undefined}>
+        <th scope="row">{row.group === "ALL" ? "All captured candidates" : pickGroupLabel(row.group)}</th>
+        <td>{row.cohort}</td>
+        <td className="num">{count(row.legs)}</td>
+        <td className="num">{row.wins} / {row.losses} / {row.pending}</td>
+        <td className="num">{pct(row.hitRate)}</td>
+        <td className="num">{pct(row.expectedHitRate)}</td>
+        <td className={`num ${row.wins + row.losses ? tone(row.profitUnits) : ""}`}>{row.wins + row.losses ? signedUnits(row.profitUnits) : "—"}</td>
+        <td className={`num ${tone(row.roiPercent)}`}>{roi(row.roiPercent)}</td>
       </tr>)}</tbody>
     </table>
   </div>;
@@ -436,6 +456,31 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
             </table>
           </div>
           <p className="meta">Model edge is probability × odds − 1 before the {pct(EV_HAIRCUT, 0)} haircut. Confidence thresholds used: {tickets.thresholds.map((row) => `${row.threshold} (${row.count})`).join(", ")}. Average closing-line value on settled legs: {tickets.clv === null ? "—" : `${tickets.clv.toFixed(2)}%`}.</p>
+        </>}
+      </section>
+
+      <section id="candidates" className="analysis-section" aria-labelledby="candidates-title">
+        <h2 id="candidates-title">Candidate universe</h2>
+        <p className="meta">Prospective paper comparison only. Each included publication stores every contemporaneous prediction-plus-complete-market candidate, its captured quote, model and consensus probabilities, confidence, conservative EV and leg-level gate result. “Eligible not selected” cleared those leg-level gates but was not used in the published accumulator; it is not a simulated replacement ticket. Profit stakes one unit per finished leg at its captured price, so it tests legs rather than claiming accumulator returns.</p>
+        {tickets.candidateUniverse.snapshotRuns === 0 ? <div className="notice">No ticket in {period} has a captured candidate universe yet. This is intentional: existing tickets are not reconstructed using hindsight. The report begins with publications after the candidate-universe migration is deployed.</div> : <>
+          <div className="analysis-kpis compact">
+            <article><small>Publication snapshots</small><strong>{count(tickets.candidateUniverse.snapshotRuns)}</strong><span>immutable candidate universes</span></article>
+            <article><small>Candidates captured</small><strong>{count(tickets.candidateUniverse.captured)}</strong><span>{count(tickets.candidateUniverse.eligible)} cleared leg-level gates</span></article>
+            <article><small>Selected legs</small><strong>{count(tickets.candidateUniverse.selected)}</strong><span>{count(tickets.candidateUniverse.selectedWithoutEligibility)} selected outside eligibility</span></article>
+          </div>
+          {tickets.candidateUniverse.selectedWithoutEligibility > 0 && <div className="notice">Data integrity alert: selected legs should always be eligible at their captured decision time. Investigate before interpreting this report.</div>}
+          <CandidateUniverseTable caption="Selected versus eligible but not selected" firstColumn="Universe" rows={tickets.candidateUniverse.cohorts} />
+          <details className="analysis-details">
+            <summary>Break down the same cohorts</summary>
+            <CandidateUniverseTable caption="By market and selection" firstColumn="Market · selection" rows={tickets.candidateUniverse.byMarket} />
+            <CandidateUniverseTable caption="By captured odds band" firstColumn="Odds band" rows={tickets.candidateUniverse.byOddsBand} />
+            <CandidateUniverseTable caption="By model probability band" firstColumn="Probability band" rows={tickets.candidateUniverse.byProbabilityBand} />
+            <CandidateUniverseTable caption="By competition" firstColumn="Competition" rows={tickets.candidateUniverse.byCompetition} />
+            <CandidateUniverseTable caption="By bookmaker" firstColumn="Bookmaker" rows={tickets.candidateUniverse.byBookmaker} />
+            <CandidateUniverseTable caption="By confidence agreement" firstColumn="Confidence" rows={tickets.candidateUniverse.byConfidence} />
+            <CandidateUniverseTable caption="By published tier and threshold" firstColumn="Tier / threshold" rows={tickets.candidateUniverse.byTier} />
+          </details>
+          <p className="meta">Do not promote an alternative from these tables alone: the samples start only after deployment, may be small, and selected and non-selected candidates are not exchangeable ticket constructions. Use them to diagnose calibration and price failures, then evaluate pre-declared two-leg, strict-confidence, no-same-league and inverse arms prospectively in separate paper cohorts.</p>
         </>}
       </section>
     </section>
