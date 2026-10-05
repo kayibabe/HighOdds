@@ -17,7 +17,7 @@ export default defineRailway(() => {
   const web = service("web", {
     source: HighOdds,
     build: "npm ci && npm run db:generate && npm run build --workspace=@highodds/web && mkdir -p apps/web/.next/standalone/apps/web/.next && cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static",
-    start: "npm run db:migrate:deploy --workspace=@highodds/db && node apps/web/.next/standalone/apps/web/server.js",
+    start: "npm run db:migrate:deploy --workspace=@highodds/db && HOSTNAME=0.0.0.0 node apps/web/.next/standalone/apps/web/server.js",
     replicas: { "europe-west4-drams3a": 1 },
     env: { ADMIN_EMAIL: preserve(), API_FOOTBALL_DAILY_QUOTA: preserve(), API_FOOTBALL_KEY: preserve(), API_FOOTBALL_QUOTA_SAFETY_PERCENT: preserve(), AUTH_SECRET: preserve(), DATABASE_URL: preserve(), EMAIL_FROM: preserve() },
   });
