@@ -1,6 +1,6 @@
 import { db } from "@highodds/db";
 import { highProbabilityPick, SELECTION_WINDOW_HOURS, type StoredPrediction } from "@highodds/core";
-import { ApiFootballClient } from "./api-football.js";
+import { ApiFootballClient, getOddsWithProvenance } from "./api-football.js";
 import { ingestOdds } from "./ingestion.js";
 import { generatePredictions } from "./predict.js";
 
@@ -84,7 +84,7 @@ export async function captureOddsCoverage(now: Date, client: ApiFootballClient):
   let captured = 0;
   let rejected = 0;
   for (const target of missing) {
-    const result = await ingestOdds(await client.getPaged("/odds", { fixture: target.providerId }));
+    const result = await ingestOdds(await getOddsWithProvenance(client, { fixture: target.providerId }));
     captured += result.quotes;
     rejected += result.rejected;
   }

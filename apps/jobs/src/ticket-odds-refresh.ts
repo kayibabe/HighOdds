@@ -1,6 +1,6 @@
 import { db } from "@highodds/db";
 import { MAX_TICKET_ODDS_FIXTURES_PER_TICK, TICKET_ODDS_REFRESH_MINUTES } from "@highodds/core";
-import type { ApiFootballClient } from "./api-football.js";
+import { getOddsWithProvenance, type OddsProviderClient } from "./api-football.js";
 import { ingestOdds } from "./ingestion.js";
 
 const REFRESH_INTERVAL_MS = TICKET_ODDS_REFRESH_MINUTES * 60 * 1000;
@@ -43,7 +43,7 @@ export function ticketFixturesNeedingOddsRefresh(now: Date, fixtures: TicketFixt
  */
 export async function refreshPublishedTicketOdds(
   now: Date,
-  client: Pick<ApiFootballClient, "getPaged">,
+  client: OddsProviderClient,
   ingest = ingestOdds
 ): Promise<TicketOddsRefreshResult> {
   const fixtures = await db.fixture.findMany({
@@ -66,7 +66,7 @@ export async function refreshPublishedTicketOdds(
   let captured = 0;
   let rejected = 0;
   for (const fixture of targets) {
-    const result = await ingest(await client.getPaged("/odds", { fixture: fixture.providerId }));
+    const result = await ingest(await getOddsWithProvenance(client, { fixture: fixture.providerId }));
     captured += result.quotes;
     rejected += result.rejected;
   }

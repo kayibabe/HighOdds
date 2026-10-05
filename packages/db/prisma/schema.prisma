@@ -145,6 +145,7 @@ model RawProviderPayload {
   receivedAt   DateTime @default(now())
   providerUpdatedAt DateTime?
   body         Json
+  oddsQuotes   OddsQuote[]
 
   @@unique([endpoint, requestKey, page, receivedAt])
   @@index([endpoint, requestKey])
@@ -227,11 +228,13 @@ model OddsQuote {
   fixture           Fixture  @relation(fields: [fixtureId], references: [id])
   bookmaker         Bookmaker @relation(fields: [bookmakerId], references: [id])
   market            Market   @relation(fields: [marketId], references: [id])
+  rawPayload        RawProviderPayload? @relation(fields: [rawPayloadId], references: [id], onDelete: Restrict)
   validationPicks   ValidationPick[]
   candidateSnapshots CandidateSnapshot[]
 
   @@index([fixtureId, capturedAt])
   @@index([bookmakerId, marketId, selection])
+  @@index([rawPayloadId])
 }
 
 model ValidationPick {

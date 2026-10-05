@@ -26,6 +26,7 @@ const FUTURE_COMPETITION_PROVIDER_ID = BASE + 2;
 const FUTURE_HOME_TEAM_PROVIDER_ID = BASE + 3;
 const FUTURE_AWAY_TEAM_PROVIDER_ID = BASE + 4;
 const FUTURE_BOOKMAKER_PROVIDER_ID = BASE + 5;
+let futureOddsPayloadId: string | null = null;
 
 const PAST_FIXTURE_PROVIDER_ID = BASE + 10; // synthetic ID for the already-elapsed fixture; markets.test.ts uses the real one (1557409) for its own, read-only, non-DB assertions
 const PAST_COMPETITION_PROVIDER_ID = BASE + 11;
@@ -77,6 +78,7 @@ describe.skipIf(!databaseUrl)("ingestOdds persistence and pre-kickoff rejection 
 
   afterAll(async () => {
     await db.oddsQuote.deleteMany({ where: { fixture: { providerId: { in: [FUTURE_FIXTURE_PROVIDER_ID, PAST_FIXTURE_PROVIDER_ID] } } } });
+    if (futureOddsPayloadId) await db.rawProviderPayload.delete({ where: { id: futureOddsPayloadId } });
     await db.fixture.deleteMany({ where: { providerId: { in: [FUTURE_FIXTURE_PROVIDER_ID, PAST_FIXTURE_PROVIDER_ID] } } });
     await db.competition.deleteMany({ where: { providerId: { in: [FUTURE_COMPETITION_PROVIDER_ID, PAST_COMPETITION_PROVIDER_ID] } } });
     await db.team.deleteMany({ where: { providerId: { in: [FUTURE_HOME_TEAM_PROVIDER_ID, FUTURE_AWAY_TEAM_PROVIDER_ID, PAST_HOME_TEAM_PROVIDER_ID, PAST_AWAY_TEAM_PROVIDER_ID] } } });
@@ -93,7 +95,9 @@ describe.skipIf(!databaseUrl)("ingestOdds persistence and pre-kickoff rejection 
       goals: { home: null, away: null }
     }]);
 
-    const oddsResult = await ingestOdds([{
+    const rawPayload = await db.rawProviderPayload.create({ data: { endpoint: "/odds", requestKey: `test-odds:${FUTURE_FIXTURE_PROVIDER_ID}`, page: 1, body: {} } });
+    futureOddsPayloadId = rawPayload.id;
+    const oddsResult = await ingestOdds([{ rawPayloadId: rawPayload.id, record: {
       fixture: { id: FUTURE_FIXTURE_PROVIDER_ID },
       update: new Date().toISOString(),
       bookmakers: [{
@@ -104,7 +108,7 @@ describe.skipIf(!databaseUrl)("ingestOdds persistence and pre-kickoff rejection 
           { id: SYNTHETIC_MARKET_PROVIDER_IDS.bothTeamsScore, name: "Both Teams Score", values: [{ value: "Yes", odd: "1.75" }, { value: "No", odd: "2.00" }] }
         ]
       }]
-    }]);
+    }}]);
 
     // 3 (Match Winner) + 2 (only the 2.5 line) + 2 (BTTS) accepted; the 1.5 line is rejected.
     expect(oddsResult).toEqual({ quotes: 7, rejected: 2 });
@@ -112,6 +116,7 @@ describe.skipIf(!databaseUrl)("ingestOdds persistence and pre-kickoff rejection 
     const fixture = await db.fixture.findUniqueOrThrow({ where: { providerId: FUTURE_FIXTURE_PROVIDER_ID } });
     const quotes = await db.oddsQuote.findMany({ where: { fixtureId: fixture.id }, include: { market: true } });
     expect(quotes).toHaveLength(7);
+    expect(quotes.map((quote) => quote.rawPayloadId)).toEqual(Array(7).fill(rawPayload.id));
 
     const bySelection = new Map(quotes.map((q) => [`${q.market.normalizedKey}:${q.selection}`, Number(q.decimalOdds)]));
     expect(bySelection.get("MATCH_WINNER:HOME")).toBe(1.44);

@@ -14,6 +14,16 @@ type ProviderOdds = {
   bookmakers?: Array<{ id?: number; name?: string; bets?: Array<{ id?: number; name?: string; values?: Array<{ value?: string; odd?: string }> }> }>;
 };
 
+type CapturedOddsRecord = { record: ProviderOdds; rawPayloadId?: string };
+
+function capturedOddsRecord(input: unknown): CapturedOddsRecord {
+  if (input && typeof input === "object" && "record" in input && "rawPayloadId" in input) {
+    const captured = input as { record: ProviderOdds; rawPayloadId?: unknown };
+    return { record: captured.record, rawPayloadId: typeof captured.rawPayloadId === "string" ? captured.rawPayloadId : undefined };
+  }
+  return { record: input as ProviderOdds };
+}
+
 // The provider occasionally sends non-canonical short codes on older fixtures ("Canc", "Abandoned"),
 // so match case-insensitively and accept those spellings too.
 export function fixtureStatus(shortStatus?: string): "SCHEDULED" | "LIVE" | "FINISHED" | "POSTPONED" | "CANCELLED" {
@@ -51,7 +61,8 @@ export async function ingestFixtures(records: unknown[]): Promise<{ ingested: nu
 export async function ingestOdds(records: unknown[]): Promise<{ quotes: number; rejected: number }> {
   let quotes = 0; let rejected = 0;
   const capturedAt = new Date();
-  for (const record of records as ProviderOdds[]) {
+  for (const input of records) {
+    const { record, rawPayloadId } = capturedOddsRecord(input);
     if (!record.fixture?.id) { rejected += 1; continue; }
     const fixture = await db.fixture.findUnique({ where: { providerId: record.fixture.id }, select: { id: true, kickoff: true } });
     if (!fixture) { rejected += 1; continue; }
@@ -71,7 +82,7 @@ export async function ingestOdds(records: unknown[]): Promise<{ quotes: number; 
           const decimalOdds = Number(value.odd);
           const selection = normalizedKey && value.value ? normalizeSelection(normalizedKey, value.value) : null;
           if (!selection || !Number.isFinite(decimalOdds) || decimalOdds <= 1 || capturedAt >= fixture.kickoff) { rejected += 1; continue; }
-          await db.oddsQuote.create({ data: { fixtureId: fixture.id, bookmakerId: bookmaker.id, marketId: market.id, selection, decimalOdds, providerUpdatedAt: providerUpdatedAt && !Number.isNaN(providerUpdatedAt.getTime()) ? providerUpdatedAt : null, capturedAt } });
+          await db.oddsQuote.create({ data: { fixtureId: fixture.id, bookmakerId: bookmaker.id, marketId: market.id, selection, decimalOdds, providerUpdatedAt: providerUpdatedAt && !Number.isNaN(providerUpdatedAt.getTime()) ? providerUpdatedAt : null, capturedAt, rawPayloadId: rawPayloadId ?? null } });
           quotes += 1;
         }
       }

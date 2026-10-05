@@ -7,8 +7,8 @@ import { auth } from "../../auth";
 async function requireAdmin(): Promise<{ id: string; email: string }> {
   const session = await auth();
   if (!session?.user?.email || session.user.role !== "ADMIN") throw new Error("Admin session required");
-  const actor = await db.user.findUnique({ where: { email: session.user.email }, select: { id: true, email: true } });
-  if (!actor) throw new Error("Admin session required");
+  const actor = await db.user.findUnique({ where: { email: session.user.email }, select: { id: true, email: true, role: true } });
+  if (!actor || actor.role !== "ADMIN") throw new Error("Admin session required");
   return actor;
 }
 

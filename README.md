@@ -92,18 +92,15 @@ only signals intent — it doesn't guarantee the database is empty or exclusive 
 
 ## Deploying to Railway
 
-Production runs as three Railway services: `web`, `jobs` (cron) and `Postgres`. Build/start settings live on
-each service in the Railway dashboard, not in this repo: Railway's Config as Code stops working on
-2026-12-01, and services that never used it can no longer opt in. The root `railway.json` is still
-auto-detected until then and mirrors the web settings; after that date it is ignored.
+Production runs as three Railway services: `web`, `jobs` (cron) and `Postgres`. Their source of truth is
+[`.railway/railway.ts`](.railway/railway.ts), which preserves live secrets without recording their values.
+Use `rtk proxy railway config plan` before changing it and `rtk proxy railway config apply --yes` to apply
+a reviewed plan. The legacy root `railway.json` is retained only for compatibility during the migration and
+is not the production source of truth.
 
-1. Create the services from this repo and set, per service (Settings → Build / Deploy):
-   - `web`: build `npm ci && npm run db:generate && npm run build --workspace=@highodds/web`, start
-     `npm run start --workspace=@highodds/web`, restart on failure.
-   - `jobs`: build `npm ci && npm run db:generate`, start `npm run jobs:run-due --workspace=@highodds/jobs`,
-     cron schedule `*/5 * * * *`.
-   Deploy with `railway redeploy -s <service> --from-source` when settings change; a plain `redeploy`
-   re-runs the previous deployment's snapshot and ignores settings changed since.
+1. Apply the reviewed Infrastructure-as-Code plan. It configures the web service to run migrations before
+   starting the Next standalone server, and the jobs service to run migrations before each five-minute cron
+   invocation. Redeploy from source after changes to application code.
 2. Set env vars from `.env.example` on both services (`DATABASE_URL` pointing at a Railway/managed Postgres,
    `API_FOOTBALL_KEY`, `AUTH_SECRET`, `AUTH_RESEND_KEY`, `EMAIL_FROM`, `ADMIN_EMAIL`).
 3. Apply migrations non-interactively: `npm run db:migrate:deploy --workspace=@highodds/db` (do **not** use

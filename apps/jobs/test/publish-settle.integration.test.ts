@@ -321,6 +321,11 @@ describe.skipIf(!databaseUrl)("publishTickets and settleResults (live DB)", () =
       const legFixtureIds = versions.flatMap((version) => version.legs.map((leg) => leg.fixtureId));
       expect(new Set(legFixtureIds).size).toBe(legFixtureIds.length);
       expect(new Set(legFixtureIds)).toEqual(new Set(scenarioFixtureIds));
+      const snapshotIds = new Set(versions.map((version) => version.candidateSnapshotRunId));
+      expect(snapshotIds.size).toBe(1);
+      const snapshotId = [...snapshotIds][0];
+      expect(snapshotId).toBeTruthy();
+      expect(await db.candidateSnapshot.count({ where: { runId: snapshotId!, selected: true } })).toBe(legFixtureIds.length);
     });
 
     it("keeps tiers disjoint when a re-run replaces the unlocked tickets", async () => {

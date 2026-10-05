@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { db } from "@highodds/db";
-import { auth } from "../../../auth";
+import { activeUser } from "../../../auth";
 import { blantyreDayBounds, blantyreToday, forecastEvidence, forecastStageLabel, highProbabilityPick, historicalSweetSpot, legOutcome, parseIsoDay, probabilityThreshold, PROBABILITY_THRESHOLDS, type StoredPrediction } from "@highodds/core";
 import { LEG_OUTCOME_LABEL, selectionLabel, shortPickLabel } from "../../../lib/selection";
 import { loadForecastEvidence } from "../../../lib/forecast-evidence";
@@ -24,8 +24,7 @@ const BLANTYRE_RECEIVED = new Intl.DateTimeFormat("en-GB", {
 });
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ date?: string | string[]; minProbability?: string | string[]; pick?: string | string[]; stake?: string | string[]; pricedOnly?: string | string[] }> }) {
-  const session = await auth();
-  if (!session?.user?.email) redirect("/signin");
+  if (!await activeUser()) redirect("/signin");
 
   const { date, minProbability, pick: pickParam, stake, pricedOnly: pricedOnlyParam } = await searchParams;
   const minimumPercent = probabilityThreshold(minProbability);

@@ -1,4 +1,4 @@
-import { ApiFootballClient } from "./api-football.js";
+import { ApiFootballClient, getOddsWithProvenance } from "./api-football.js";
 import { parseIsoDay, providerDates, SELECTION_WINDOW_HOURS } from "@highodds/core";
 import { ingestFixtures, ingestOdds } from "./ingestion.js";
 import { generatePredictions } from "./predict.js";
@@ -39,7 +39,7 @@ async function execute(job: { jobType: string; idempotencyKey: string; payload?:
       const now = new Date();
       let quotes = 0; let rejected = 0;
       for (const oddsDate of providerDates(now, new Date(now.getTime() + SELECTION_WINDOW_HOURS * 3_600_000))) {
-        const result = await ingestOdds(await client.getPaged("/odds", { date: oddsDate }));
+        const result = await ingestOdds(await getOddsWithProvenance(client, { date: oddsDate }));
         quotes += result.quotes; rejected += result.rejected;
       }
       return { quotes, rejected };

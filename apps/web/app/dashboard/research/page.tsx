@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { auth } from "../../../auth";
+import { activeUser } from "../../../auth";
 import { blantyreToday, parseIsoDay, utcDate } from "@highodds/core";
 import { loadTicketCards } from "../../../lib/tickets";
 import { loadTotalGoalsRuleDay } from "../../../lib/total-goals";
@@ -15,8 +15,7 @@ export const dynamic = "force-dynamic";
 export default async function DailyResearchPage({ searchParams }: {
   searchParams: Promise<{ date?: string | string[] }>;
 }) {
-  const session = await auth();
-  if (!session?.user?.email) redirect("/signin");
+  if (!await activeUser()) redirect("/signin");
   const { date } = await searchParams;
   const now = new Date();
   const today = blantyreToday(now);

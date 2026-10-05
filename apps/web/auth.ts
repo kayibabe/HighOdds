@@ -5,6 +5,25 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { verify } from "@node-rs/argon2";
 import { db } from "@highodds/db";
 
+/**
+ * Resolves entitlement from the database on every protected server render. JWTs are deliberately
+ * short on authorization facts: a subscriber whose paid period has ended must not retain access
+ * until the token itself expires.
+ */
+export async function activeUser(): Promise<{ id: string; email: string; role: "ADMIN" | "SUBSCRIBER" } | null> {
+  const session = await auth();
+  if (!session?.user?.email) return null;
+  const user = await db.user.findUnique({
+    where: { email: session.user.email },
+    select: { id: true, email: true, role: true, activeTo: true }
+  });
+  if (!user) return null;
+  if (user.role === "ADMIN" || (user.activeTo !== null && user.activeTo > new Date())) {
+    return { id: user.id, email: user.email, role: user.role };
+  }
+  return null;
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   // Railway (like most PaaS reverse proxies) terminates TLS and forwards the original host via
   // X-Forwarded-Host; Auth.js v5 rejects that by default (UntrustedHost) unless explicitly told

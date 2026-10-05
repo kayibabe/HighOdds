@@ -155,34 +155,37 @@ export async function publishTickets(now: Date): Promise<PublishResult> {
   for (const draft of drafts) for (const leg of draft.legs) {
     selected.set(candidateKey(leg), { tier: draft.tier.key, confidenceThreshold: draft.confidenceThreshold });
   }
-  const snapshot = await db.candidateSnapshotRun.create({
-    data: {
-      targetDate, capturedAt: now, policyVersion: CANDIDATE_SNAPSHOT_POLICY_VERSION,
-      candidates: {
-        create: candidates.map((candidate) => {
-          const selection = selected.get(candidateKey(candidate));
-          return {
-            fixtureId: candidate.fixtureId, quoteId: candidate.quoteId, marketKey: candidate.market, selection: candidate.selection,
-            decimalOdds: candidate.decimalOdds, modelProbability: candidate.modelProbability,
-            consensusProbability: candidate.consensusProbability, confidenceScore: candidate.confidenceScore,
-            conservativeExpectedValue: candidate.conservativeExpectedValue,
-            baseEligibilityReason: legEligibility(candidate, now).reason ?? null,
-            tierEligibility: Object.fromEntries(TICKET_TIERS.map((tier) => [tier.key, legEligibilityForTier(candidate, tier, now).reason ?? null])),
-            selected: selection !== undefined, ticketTier: selection?.tier ?? null,
-            confidenceThreshold: selection?.confidenceThreshold ?? null
-          };
-        })
-      }
-    },
-    select: { id: true }
-  });
   let published = 0;
 
-  for (const draft of drafts) {
-    const open = openByTier.get(draft.tier.key);
-    if (open && open.lockAt <= now) continue; // defensive: buildTicketsAround never drafts a locked tier
-    const lockAt = draft.legs.reduce((earliest, leg) => (leg.kickoff < earliest ? leg.kickoff : earliest), draft.legs[0]!.kickoff);
-    await db.$transaction(async (tx) => {
+  // A snapshot is evidence for precisely the ticket versions that committed with it. Keeping all
+  // versions, legs and their snapshot in one transaction prevents a retry/failure from presenting
+  // an intended-but-never-published leg as selected in the research denominator.
+  await db.$transaction(async (tx) => {
+    const snapshot = await tx.candidateSnapshotRun.create({
+      data: {
+        targetDate, capturedAt: now, policyVersion: CANDIDATE_SNAPSHOT_POLICY_VERSION,
+        candidates: {
+          create: candidates.map((candidate) => {
+            const selection = selected.get(candidateKey(candidate));
+            return {
+              fixtureId: candidate.fixtureId, quoteId: candidate.quoteId, marketKey: candidate.market, selection: candidate.selection,
+              decimalOdds: candidate.decimalOdds, modelProbability: candidate.modelProbability,
+              consensusProbability: candidate.consensusProbability, confidenceScore: candidate.confidenceScore,
+              conservativeExpectedValue: candidate.conservativeExpectedValue,
+              baseEligibilityReason: legEligibility(candidate, now).reason ?? null,
+              tierEligibility: Object.fromEntries(TICKET_TIERS.map((tier) => [tier.key, legEligibilityForTier(candidate, tier, now).reason ?? null])),
+              selected: selection !== undefined, ticketTier: selection?.tier ?? null,
+              confidenceThreshold: selection?.confidenceThreshold ?? null
+            };
+          })
+        }
+      },
+      select: { id: true }
+    });
+    for (const draft of drafts) {
+      const open = openByTier.get(draft.tier.key);
+      if (open && open.lockAt <= now) continue; // defensive: buildTicketsAround never drafts a locked tier
+      const lockAt = draft.legs.reduce((earliest, leg) => (leg.kickoff < earliest ? leg.kickoff : earliest), draft.legs[0]!.kickoff);
       const version = await tx.ticketVersion.create({
         data: {
           targetDate, tier: draft.tier.key, bookmakerId: draft.bookmakerId, combinedOdds: draft.combinedOdds,
@@ -201,8 +204,8 @@ export async function publishTickets(now: Date): Promise<PublishResult> {
         if (!quote) throw new Error(`Missing source quote for leg ${leg.fixtureId}/${leg.selection}`);
         await tx.ticketLeg.create({ data: { ticketVersionId: version.id, fixtureId: leg.fixtureId, quoteId: quote.id, marketKey: leg.market, selection: leg.selection, decimalOdds: leg.decimalOdds, probability: leg.modelProbability } });
       }
-    });
-    published += 1;
-  }
+      published += 1;
+    }
+  }, { timeout: 15_000 });
   return result(published);
 }
