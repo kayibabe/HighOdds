@@ -342,6 +342,26 @@ export function summarizeLegs(legs: LegSummaryInput[]): MarketLegPerformance[] {
   return [...markets.map((market) => legPerformance(market, legs.filter((leg) => leg.marketKey === market))), legPerformance("ALL", legs)];
 }
 
+export const EXPLORATORY_COMPETITION_SAMPLE = 30;
+
+export interface CompetitionSelectionCalibration extends SelectionCalibration {
+  competition: string;
+  exploratory: boolean;
+}
+
+/** Calibration by competition, market and selection. Small cohorts are descriptive only. */
+export function calibrationByCompetitionSelection(rows: Array<ScoredPrediction & { competition: string }>, exploratoryBelow = EXPLORATORY_COMPETITION_SAMPLE): CompetitionSelectionCalibration[] {
+  return [...groupBy(rows, (row) => `${row.competition}\u0000${row.marketKey}\u0000${row.selection}`).values()].map((group) => {
+    const meanPredicted = mean(group.map((row) => row.probability))!;
+    const observedRate = group.filter((row) => row.hit).length / group.length;
+    return {
+      competition: group[0]!.competition, market: group[0]!.marketKey, selection: group[0]!.selection,
+      predictions: group.length, meanPredicted, observedRate, bias: meanPredicted - observedRate,
+      exploratory: group.length < exploratoryBelow
+    };
+  }).sort((a, b) => b.predictions - a.predictions || a.competition.localeCompare(b.competition) || a.market.localeCompare(b.market) || a.selection.localeCompare(b.selection));
+}
+
 /** A prospectively captured candidate and its eventual fixture result, if known. */
 export interface CandidateUniverseInput {
   marketKey: string;
@@ -444,4 +464,42 @@ export function summarizeCandidateUniverse(rows: CandidateUniverseInput[]): Cand
     byConfidence: summarizeCandidateDimension(rows, (row) => row.confidenceScore >= 70 ? "≥ 70" : row.confidenceScore >= 65 ? "65–69" : row.confidenceScore >= 60 ? "60–64" : "< 60"),
     byTier: summarizeCandidateDimension(rows, (row) => row.selected ? `${row.ticketTier ?? "Unknown"} @ ${row.confidenceThreshold ?? "?"}` : "Not selected")
   };
+}
+
+/** One published leg's post-publication quote history, used to judge whether CLV is observable. */
+export interface QuoteCadenceInput {
+  marketKey: string;
+  bookmaker: string;
+  /** Quotes captured strictly after the ticket publication and before kickoff. */
+  postPublicationUpdates: number;
+  /** CLV is only valid when a quote was captured strictly after the entry quote, before kickoff. */
+  clvPercent: number | null;
+}
+
+export interface QuoteCadencePerformance {
+  group: string;
+  legs: number;
+  legsWithPostPublicationUpdate: number;
+  updateCoverage: number | null;
+  meanPostPublicationUpdates: number | null;
+  legsWithValidClv: number;
+  meanClvPercent: number | null;
+}
+
+function quoteCadencePerformance(group: string, rows: QuoteCadenceInput[]): QuoteCadencePerformance {
+  const validClv = rows.flatMap((row) => row.clvPercent === null ? [] : [row.clvPercent]);
+  const updated = rows.filter((row) => row.postPublicationUpdates > 0).length;
+  return {
+    group, legs: rows.length, legsWithPostPublicationUpdate: updated,
+    updateCoverage: rows.length === 0 ? null : updated / rows.length,
+    meanPostPublicationUpdates: mean(rows.map((row) => row.postPublicationUpdates)),
+    legsWithValidClv: validClv.length, meanClvPercent: mean(validClv)
+  };
+}
+
+/** Quote-update observability by market and bookmaker. CLV must be absent when no later quote exists. */
+export function summarizeQuoteCadence(rows: QuoteCadenceInput[]) {
+  const summarize = (keyFor: (row: QuoteCadenceInput) => string) =>
+    [...groupBy(rows, keyFor).entries()].map(([group, values]) => quoteCadencePerformance(group, values)).sort((a, b) => a.group.localeCompare(b.group));
+  return { overall: quoteCadencePerformance("ALL", rows), byMarket: summarize((row) => row.marketKey), byBookmaker: summarize((row) => row.bookmaker) };
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  calibrationBuckets, calibrationByMarket, calibrationBySelection, filterPicks, isPickFilterActive, median, modelPicks, NO_PICK_FILTER,
-  parsePickFilter, summarizeCandidateUniverse, summarizeLegs, summarizePicks, summarizeTiers,
+  calibrationBuckets, calibrationByCompetitionSelection, calibrationByMarket, calibrationBySelection, filterPicks, isPickFilterActive, median, modelPicks, NO_PICK_FILTER,
+  parsePickFilter, summarizeCandidateUniverse, summarizeLegs, summarizePicks, summarizeQuoteCadence, summarizeTiers,
   type ModelPick, type ScoredPrediction
 } from "../src/analysis.js";
 
@@ -192,6 +192,19 @@ describe("summarizeLegs", () => {
   });
 });
 
+describe("calibrationByCompetitionSelection", () => {
+  it("keeps competition cohorts separate and marks small samples exploratory", () => {
+    const result = calibrationByCompetitionSelection([
+      { ...rows[0]!, competition: "League A" }, { ...rows[1]!, competition: "League A" },
+      { ...rows[2]!, competition: "League B" }
+    ], 3);
+    expect(result).toEqual(expect.arrayContaining([
+      expect.objectContaining({ competition: "League A", market: "MATCH_WINNER", selection: "HOME", predictions: 1, exploratory: true }),
+      expect.objectContaining({ competition: "League B", market: "MATCH_WINNER", selection: "AWAY", predictions: 1, exploratory: true })
+    ]));
+  });
+});
+
 describe("summarizeCandidateUniverse", () => {
   it("compares selected legs with eligible non-selected candidates without treating rejected rows as a cohort", () => {
     const summary = summarizeCandidateUniverse([
@@ -209,5 +222,19 @@ describe("summarizeCandidateUniverse", () => {
       expect.objectContaining({ group: "STANDARD @ 70", cohort: "Selected" }),
       expect.objectContaining({ group: "Not selected", cohort: "Eligible not selected" })
     ]));
+  });
+});
+
+describe("summarizeQuoteCadence", () => {
+  it("does not manufacture CLV where a later pre-kickoff quote was not captured", () => {
+    const summary = summarizeQuoteCadence([
+      { marketKey: "MATCH_WINNER", bookmaker: "Book", postPublicationUpdates: 0, clvPercent: null },
+      { marketKey: "MATCH_WINNER", bookmaker: "Book", postPublicationUpdates: 2, clvPercent: 1.5 },
+      { marketKey: "BTTS", bookmaker: "Other", postPublicationUpdates: 1, clvPercent: -0.5 }
+    ]);
+    expect(summary.overall).toMatchObject({ legs: 3, legsWithPostPublicationUpdate: 2, legsWithValidClv: 2 });
+    expect(summary.overall.updateCoverage).toBeCloseTo(2 / 3, 10);
+    expect(summary.overall.meanClvPercent).toBeCloseTo(0.5, 10);
+    expect(summary.byMarket.find((row) => row.group === "MATCH_WINNER")).toMatchObject({ legs: 2, legsWithValidClv: 1 });
   });
 });

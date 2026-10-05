@@ -382,6 +382,21 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
           </div>
           <p className="meta">Bias is mean predicted minus observed rate, in percentage points. Gaps of 3 pp or more are labelled.</p>
 
+          <details className="analysis-details">
+            <summary>Calibration by competition and selection</summary>
+            <div className="matches-table-wrap">
+              <table className="analysis-table">
+                <caption>Walk-forward forecasts; cohorts below 30 are exploratory</caption>
+                <thead><tr><th scope="col">Competition</th><th scope="col">Market</th><th scope="col">Selection</th><th scope="col">Forecasts</th><th scope="col">Predicted</th><th scope="col">Observed</th><th scope="col">Bias</th><th scope="col">Evidence</th></tr></thead>
+                <tbody>{calibration.byCompetitionSelection.map((row) => <tr key={`${row.competition}-${row.market}-${row.selection}`} className={row.exploratory ? "attention" : undefined}>
+                  <th scope="row">{row.competition}</th><td>{label(row.market)}</td><td>{label(row.selection)}</td>
+                  <td className="num">{count(row.predictions)}</td><td className="num">{pct(row.meanPredicted)}</td><td className="num">{pct(row.observedRate)}</td>
+                  <td className={`num ${Math.abs(row.bias) >= 0.03 ? "analysis-bias" : ""}`}>{signedPp(row.bias)}</td><td>{row.exploratory ? "Exploratory" : "30+ forecasts"}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+          </details>
+
           <div className="analysis-split reliability">
             <figure className="analysis-figure">
               <ReliabilityChart buckets={calibration.buckets} />
@@ -456,7 +471,18 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
               </tr>)}</tbody>
             </table>
           </div>
-          <p className="meta">Model edge is probability × odds − 1 before the {pct(EV_HAIRCUT, 0)} haircut. Confidence thresholds used: {tickets.thresholds.map((row) => `${row.threshold} (${row.count})`).join(", ")}. Average closing-line value on settled legs: {tickets.clv === null ? "—" : `${tickets.clv.toFixed(2)}%`}.</p>
+          <div className="matches-table-wrap">
+            <table className="analysis-table">
+              <caption>Post-publication quote capture cadence</caption>
+              <thead><tr><th scope="col">Market</th><th scope="col">Ticket legs</th><th scope="col">Legs with later quote</th><th scope="col">Update coverage</th><th scope="col">Mean later quotes</th><th scope="col">Valid CLV legs</th><th scope="col">Mean CLV</th></tr></thead>
+              <tbody>{tickets.quoteCadence.byMarket.map((row) => <tr key={row.group}>
+                <th scope="row">{label(row.group)}</th><td className="num">{count(row.legs)}</td><td className="num">{count(row.legsWithPostPublicationUpdate)}</td>
+                <td className="num">{pct(row.updateCoverage)}</td><td className="num">{num(row.meanPostPublicationUpdates, 1)}</td><td className="num">{count(row.legsWithValidClv)}</td>
+                <td className="num">{row.meanClvPercent === null ? "—" : `${row.meanClvPercent.toFixed(2)}%`}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>
+          <p className="meta">CLV is now unavailable unless a strictly later same-bookmaker quote was captured before kickoff. Model edge is probability × odds − 1 before the {pct(EV_HAIRCUT, 0)} haircut. Confidence thresholds used: {tickets.thresholds.map((row) => `${row.threshold} (${row.count})`).join(", ")}.</p>
         </>}
       </section>
 

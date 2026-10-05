@@ -1,10 +1,10 @@
 import { db } from "@highodds/db";
 import {
-  blantyreDayBounds, calibrationBuckets, calibrationByMarket, calibrationBySelection, displayLegOutcome, filterPicks, median, modelPicks,
-  parseSettlementEvidence, QUOTE_MAX_AGE_MINUTES, resolveSelection, SELECTION_WINDOW_HOURS, summarizeCandidateUniverse, summarizeLegs, summarizePicks, summarizeTiers, utcDate,
+  blantyreDayBounds, calibrationBuckets, calibrationByCompetitionSelection, calibrationByMarket, calibrationBySelection, displayLegOutcome, filterPicks, median, modelPicks,
+  parseSettlementEvidence, QUOTE_MAX_AGE_MINUTES, resolveSelection, SELECTION_WINDOW_HOURS, summarizeCandidateUniverse, summarizeLegs, summarizePicks, summarizeQuoteCadence, summarizeTiers, utcDate,
   type CandidateUniverseInput, type DayRange, type LegSummaryInput, type PickFilter, type ScoredPrediction, type TicketOutcome
 } from "@highodds/core";
-import { averageClv } from "./clv";
+import { loadTicketQuoteCadence } from "./clv";
 import { decisionLegs } from "./tickets";
 
 // Loaders for the /analysis page. Each returns plain numbers; the aggregation maths lives in
@@ -174,7 +174,7 @@ export async function loadModelCoverage(now: Date) {
   };
 }
 
-type PredictionRow = { fixtureId: string; marketKey: string; selection: string; probability: number; asOfAt: Date; kickoff: Date; trainedUntil: Date; homeGoals: number; awayGoals: number };
+type PredictionRow = { fixtureId: string; competition: string; marketKey: string; selection: string; probability: number; asOfAt: Date; kickoff: Date; trainedUntil: Date; homeGoals: number; awayGoals: number };
 
 /**
  * Walk-forward scoring with the same rules as the Results page: the latest prediction per fixture,
@@ -184,26 +184,27 @@ export async function loadCalibration(range: DayRange) {
   const { start, end } = kickoffBounds(range);
   const rows = await db.$queryRaw<PredictionRow[]>`
     SELECT DISTINCT ON (p."fixtureId", p."marketId", p."selection")
-      p."fixtureId", m."normalizedKey" AS "marketKey", p."selection", p."probability"::float8 AS "probability",
+      p."fixtureId", c."name" AS "competition", m."normalizedKey" AS "marketKey", p."selection", p."probability"::float8 AS "probability",
       p."asOfAt", f."kickoff", mr."trainedUntil", f."homeGoals", f."awayGoals"
     FROM "Prediction" p
-      JOIN "Fixture" f ON f."id" = p."fixtureId"
+      JOIN "Fixture" f ON f."id" = p."fixtureId" JOIN "Competition" c ON c."id" = f."competitionId"
       JOIN "Market" m ON m."id" = p."marketId"
       JOIN "ModelRun" mr ON mr."id" = p."modelRunId"
     WHERE p."stage" = 'SELECTION' AND f."status" = 'FINISHED' AND f."homeGoals" IS NOT NULL AND f."awayGoals" IS NOT NULL AND m."normalizedKey" IS NOT NULL
       AND f."kickoff" >= ${start} AND f."kickoff" < ${end}
     ORDER BY p."fixtureId", p."marketId", p."selection", p."asOfAt" DESC`;
-  const scored: ScoredPrediction[] = [];
+  const scored: Array<ScoredPrediction & { competition: string }> = [];
   let excluded = 0;
   for (const row of rows) {
     const result = resolveSelection(row.marketKey, row.selection, row.homeGoals, row.awayGoals);
     if (result === null || row.asOfAt >= row.kickoff || row.trainedUntil > row.asOfAt) { excluded += 1; continue; }
-    scored.push({ fixtureId: row.fixtureId, marketKey: row.marketKey, selection: row.selection, probability: row.probability, hit: result === "WIN" });
+    scored.push({ fixtureId: row.fixtureId, competition: row.competition, marketKey: row.marketKey, selection: row.selection, probability: row.probability, hit: result === "WIN" });
   }
   return {
     scored: scored.length, excluded, rows: scored,
     byMarket: calibrationByMarket(scored),
     bySelection: calibrationBySelection(scored),
+    byCompetitionSelection: calibrationByCompetitionSelection(scored),
     buckets: calibrationBuckets(scored)
   };
 }
@@ -330,7 +331,9 @@ export async function loadTicketPerformance(range: DayRange) {
       legProbabilities: ticket.legs.map((leg) => Number(leg.probability))
     };
   });
-  const settledIds = tickets.filter((ticket) => ticket.settlements[0] && ticket.settlements[0].outcome !== "PENDING").map((ticket) => ticket.id);
+  const settledIds = new Set(tickets.filter((ticket) => ticket.settlements[0] && ticket.settlements[0].outcome !== "PENDING").map((ticket) => ticket.id));
+  const quoteCadenceRows = await loadTicketQuoteCadence(tickets.map((ticket) => ticket.id));
+  const settledClv = quoteCadenceRows.filter((row) => settledIds.has(row.ticketVersionId)).flatMap((row) => row.clvPercent === null ? [] : [row.clvPercent]);
   const snapshotRunIds = [...new Set(tickets.flatMap((ticket) => ticket.candidateSnapshotRunId ? [ticket.candidateSnapshotRunId] : []))];
   const snapshots = snapshotRunIds.length === 0 ? [] : await db.candidateSnapshot.findMany({
     where: { runId: { in: snapshotRunIds } },
@@ -357,7 +360,8 @@ export async function loadTicketPerformance(range: DayRange) {
     tiers: summarizeTiers(tierInputs),
     markets: summarizeLegs(legs),
     thresholds: [...thresholds.entries()].sort((a, b) => b[0] - a[0]).map(([threshold, count]) => ({ threshold, count })),
-    clv: await averageClv(settledIds),
+    clv: settledClv.length === 0 ? null : settledClv.reduce((sum, value) => sum + value, 0) / settledClv.length,
+    quoteCadence: summarizeQuoteCadence(quoteCadenceRows),
     candidateUniverse: { snapshotRuns: snapshotRunIds.length, ...summarizeCandidateUniverse(candidateUniverseRows) }
   };
 }
