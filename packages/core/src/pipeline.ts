@@ -6,6 +6,16 @@
 /** Selection-window forecasts and tickets consider fixtures this many hours after the run. */
 export const SELECTION_WINDOW_HOURS = 20;
 
+/**
+ * Published paper-ticket fixtures are re-queried at most this often before kickoff. This is
+ * deliberately separate from daily market ingestion: it creates post-publication price evidence
+ * without repeatedly polling the full selection universe.
+ */
+export const TICKET_ODDS_REFRESH_MINUTES = 30;
+
+/** Bound the API-Football fixture calls made by one cron invocation. */
+export const MAX_TICKET_ODDS_FIXTURES_PER_TICK = 12;
+
 /** Fixture discovery covers today and the following six Africa/Blantyre calendar days. */
 export const FIXTURE_LOOKAHEAD_DAYS = 7;
 

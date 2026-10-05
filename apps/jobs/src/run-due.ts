@@ -7,6 +7,7 @@ import { claimDueJobs, completeJob, ensureDailyJobs, failAndReleaseJob, requeueE
 import { NoTrainingDataError, assertTrainedAny, trainModel } from "./train.js";
 import { publishTickets } from "./publish.js";
 import { refreshFinishedFixtures, refreshPendingResults, settleResults } from "./settle.js";
+import { refreshPublishedTicketOdds } from "./ticket-odds-refresh.js";
 
 const EXECUTION_TIMEOUT_MS = 4 * 60 * 1000;
 // Missing history won't fix itself within minutes; retry hourly so training resumes on its own after a backfill.
@@ -91,6 +92,19 @@ async function main(): Promise<void> {
     }
   }
   await settleFinishedMatches();
+  await refreshTicketOdds();
+}
+
+/** Every tick, bounded evidence capture for prices observed after a ticket was published. */
+async function refreshTicketOdds(): Promise<void> {
+  if (Date.now() >= deadline - 30_000) return;
+  try {
+    const result = await refreshPublishedTicketOdds(new Date(), new ApiFootballClient());
+    if (result.requested > 0) console.log(`TICKET_ODDS_REFRESH eligible=${result.eligible} requested=${result.requested} captured=${result.captured} rejected=${result.rejected}`);
+  } catch (error) {
+    // A later quote is diagnostic evidence, never a reason to interrupt daily publication or settlement.
+    console.error("TICKET_ODDS_REFRESH failed:", error instanceof Error ? error.message : error);
+  }
 }
 
 /** Every tick, not a daily job: picks up full-time results within minutes and settles what they complete. */
