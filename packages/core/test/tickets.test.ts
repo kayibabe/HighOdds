@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AWAY_WIN_GUARD_MIN_MODEL_IMPLIED_EDGE, buildTickets, buildTicketsAround, legEligibility, modelImpliedEdge } from "../src/tickets.js";
+import { AWAY_WIN_GUARD_MIN_MODEL_IMPLIED_EDGE, buildTickets, buildTicketsAround, legEligibility, legEligibilityForTier, modelImpliedEdge, TICKET_TIERS } from "../src/tickets.js";
 import type { CandidateLeg, TicketDraft } from "../src/types.js";
 
 const now = new Date("2026-09-20T06:00:00Z");
@@ -24,6 +24,31 @@ describe("ticket construction", () => {
 
     expect(modelImpliedEdge(guarded)).toBeGreaterThan(AWAY_WIN_GUARD_MIN_MODEL_IMPLIED_EDGE);
     expect(legEligibility(guarded, now)).toEqual({ eligible: true });
+  });
+
+  it("keeps the away-win restriction tier-specific and rejects Standard-tier long shots", () => {
+    const standard = TICKET_TIERS.find((tier) => tier.key === "STANDARD")!;
+    const value = TICKET_TIERS.find((tier) => tier.key === "VALUE")!;
+    const high = TICKET_TIERS.find((tier) => tier.key === "HIGH")!;
+    const retained = leg("away-standard", 3.5, { selection: "AWAY", modelProbability: 0.4 });
+    const lowProbability = leg("away-low-probability", 3.5, { selection: "AWAY", modelProbability: 0.34 });
+    const longShot = leg("away-long-shot", 4, { selection: "AWAY", modelProbability: 0.4 });
+
+    expect(legEligibilityForTier(retained, standard, now)).toEqual({ eligible: true });
+    expect(legEligibilityForTier(retained, value, now)).toEqual({ eligible: false, reason: "AWAY_WIN_NOT_ALLOWED_IN_VALUE_HIGH" });
+    expect(legEligibilityForTier(retained, high, now)).toEqual({ eligible: false, reason: "AWAY_WIN_NOT_ALLOWED_IN_VALUE_HIGH" });
+    expect(legEligibilityForTier(lowProbability, standard, now)).toEqual({ eligible: false, reason: "AWAY_WIN_STANDARD_MODEL_PROBABILITY_BELOW_35PCT" });
+    expect(legEligibilityForTier(longShot, standard, now)).toEqual({ eligible: false, reason: "AWAY_WIN_STANDARD_ODDS_4_00_OR_HIGHER" });
+  });
+
+  it("does not use otherwise viable away wins to construct Value or High tickets", () => {
+    const candidates = [
+      leg("away-a", 2.5, { selection: "AWAY", modelProbability: 0.4 }),
+      leg("away-b", 2.5, { selection: "AWAY", modelProbability: 0.4 }),
+      leg("away-c", 2.5, { selection: "AWAY", modelProbability: 0.4 })
+    ];
+    const drafts = buildTickets(candidates, ["preferred"], now, { skipTiers: ["STANDARD"] });
+    expect(drafts).toEqual([]);
   });
 
   it("builds same-bookmaker, one-fixture-per-leg tickets", () => {

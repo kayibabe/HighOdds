@@ -11,6 +11,14 @@ import { decisionLegs } from "./tickets";
 // @highodds/core (analysis.ts) where it is unit-tested.
 
 const HOUR_MS = 60 * 60 * 1000;
+function eligibleForAnyTier(baseEligibilityReason: string | null, value: unknown): boolean {
+  if (baseEligibilityReason !== null) return false;
+  // Snapshots before the tier-policy field remain leg-eligible; they are not retrospectively
+  // assigned a later policy. New snapshots must explicitly show at least one allowed tier.
+  if (!value || typeof value !== "object" || Array.isArray(value)) return true;
+  const results = Object.values(value as Record<string, unknown>);
+  return results.length === 0 || results.some((result) => result === null);
+}
 /** A scheduled fixture this long past kickoff should have a result by now. */
 const OVERDUE_RESULT_HOURS = 3;
 /** Job health looks at this many recent days of runs. */
@@ -337,7 +345,8 @@ export async function loadTicketPerformance(range: DayRange) {
       marketKey: snapshot.marketKey, selection: snapshot.selection, decimalOdds: Number(snapshot.decimalOdds),
       probability: Number(snapshot.modelProbability), confidenceScore: snapshot.confidenceScore,
       competition: fixture.competition.name, bookmaker: snapshot.quote.bookmaker.name,
-      baseEligibilityReason: snapshot.baseEligibilityReason, selected: snapshot.selected,
+      baseEligibilityReason: snapshot.baseEligibilityReason,
+      eligibleForAnyTier: eligibleForAnyTier(snapshot.baseEligibilityReason, snapshot.tierEligibility), selected: snapshot.selected,
       ticketTier: snapshot.ticketTier, confidenceThreshold: snapshot.confidenceThreshold,
       outcome: fixture.status === "POSTPONED" || fixture.status === "CANCELLED" ? "VOID"
         : fixture.status === "FINISHED" ? (resolved ?? "UNRESOLVED") : "PENDING"

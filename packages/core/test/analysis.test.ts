@@ -195,9 +195,9 @@ describe("summarizeLegs", () => {
 describe("summarizeCandidateUniverse", () => {
   it("compares selected legs with eligible non-selected candidates without treating rejected rows as a cohort", () => {
     const summary = summarizeCandidateUniverse([
-      { marketKey: "TOTAL_GOALS", selection: "OVER_2_5", decimalOdds: 1.9, probability: 0.6, confidenceScore: 72, competition: "A", bookmaker: "Book", baseEligibilityReason: null, selected: true, ticketTier: "STANDARD", confidenceThreshold: 70, outcome: "WIN" },
-      { marketKey: "TOTAL_GOALS", selection: "UNDER_2_5", decimalOdds: 2.1, probability: 0.55, confidenceScore: 68, competition: "A", bookmaker: "Book", baseEligibilityReason: null, selected: false, ticketTier: null, confidenceThreshold: null, outcome: "LOSS" },
-      { marketKey: "BTTS", selection: "YES", decimalOdds: 1.7, probability: 0.6, confidenceScore: 75, competition: "B", bookmaker: "Book", baseEligibilityReason: "ODDS_BELOW_1_80", selected: false, ticketTier: null, confidenceThreshold: null, outcome: "WIN" }
+      { marketKey: "TOTAL_GOALS", selection: "OVER_2_5", decimalOdds: 1.9, probability: 0.6, confidenceScore: 72, competition: "A", bookmaker: "Book", baseEligibilityReason: null, eligibleForAnyTier: true, selected: true, ticketTier: "STANDARD", confidenceThreshold: 70, outcome: "WIN" },
+      { marketKey: "TOTAL_GOALS", selection: "UNDER_2_5", decimalOdds: 2.1, probability: 0.55, confidenceScore: 68, competition: "A", bookmaker: "Book", baseEligibilityReason: null, eligibleForAnyTier: true, selected: false, ticketTier: null, confidenceThreshold: null, outcome: "LOSS" },
+      { marketKey: "BTTS", selection: "YES", decimalOdds: 1.7, probability: 0.6, confidenceScore: 75, competition: "B", bookmaker: "Book", baseEligibilityReason: "ODDS_BELOW_1_80", eligibleForAnyTier: false, selected: false, ticketTier: null, confidenceThreshold: null, outcome: "WIN" }
     ]);
     expect(summary).toMatchObject({ captured: 3, eligible: 2, selected: 1, selectedWithoutEligibility: 0 });
     const selected = summary.cohorts.find((row) => row.cohort === "Selected")!;

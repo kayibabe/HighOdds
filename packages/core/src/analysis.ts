@@ -353,6 +353,8 @@ export interface CandidateUniverseInput {
   bookmaker: string;
   /** null means the candidate passed the leg-level gates at publication time. */
   baseEligibilityReason: string | null;
+  /** True if the captured policy allowed this candidate in at least one ticket tier. */
+  eligibleForAnyTier: boolean;
   selected: boolean;
   ticketTier: string | null;
   confidenceThreshold: number | null;
@@ -405,7 +407,7 @@ function candidateCohortPerformance(group: string, cohort: CandidateCohortPerfor
 const oddsBand = (odds: number) => odds < 2 ? "1.80–1.99" : odds < 2.5 ? "2.00–2.49" : odds < 3 ? "2.50–2.99" : "≥ 3.00";
 const probabilityBand = (probability: number) => probability < 0.5 ? "< 50%" : probability < 0.6 ? "50–59%" : probability < 0.7 ? "60–69%" : "≥ 70%";
 const candidateCohort = (row: CandidateUniverseInput): CandidateCohortPerformance["cohort"] | null =>
-  row.selected ? "Selected" : row.baseEligibilityReason === null ? "Eligible not selected" : null;
+  row.selected ? "Selected" : row.eligibleForAnyTier ? "Eligible not selected" : null;
 
 function summarizeCandidateDimension(rows: CandidateUniverseInput[], groupFor: (row: CandidateUniverseInput) => string): CandidateCohortPerformance[] {
   const groups = new Map<string, CandidateUniverseInput[]>();
@@ -430,7 +432,7 @@ export function summarizeCandidateUniverse(rows: CandidateUniverseInput[]): Cand
   const cohorts = summarizeCandidateDimension(rows, () => "ALL");
   return {
     captured: rows.length,
-    eligible: rows.filter((row) => row.baseEligibilityReason === null).length,
+    eligible: rows.filter((row) => row.eligibleForAnyTier).length,
     selected: rows.filter((row) => row.selected).length,
     selectedWithoutEligibility: rows.filter((row) => row.selected && row.baseEligibilityReason !== null).length,
     cohorts,

@@ -337,6 +337,8 @@ model CandidateSnapshot {
   confidenceScore     Int
   conservativeExpectedValue Decimal        @db.Decimal(10, 6)
   baseEligibilityReason String?
+  /// Policy result for each tier; null value means eligible for that tier.
+  tierEligibility     Json                 @default("{}")
   selected            Boolean              @default(false)
   ticketTier          TicketTier?
   confidenceThreshold Int?

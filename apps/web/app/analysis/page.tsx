@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import {
-  CONFIDENCE_THRESHOLDS, DAILY_JOB_SCHEDULE, DIXON_COLES_RHO, EV_HAIRCUT, EXPECTED_GOALS_FLOOR, HISTORY_LOOKBACK_DAYS, IPF_ITERATIONS,
+  AWAY_WIN_STANDARD_MAX_ODDS_EXCLUSIVE, AWAY_WIN_STANDARD_MIN_MODEL_PROBABILITY, CONFIDENCE_THRESHOLDS, DAILY_JOB_SCHEDULE, DIXON_COLES_RHO, EV_HAIRCUT, EXPECTED_GOALS_FLOOR, HISTORY_LOOKBACK_DAYS, IPF_ITERATIONS,
   JOB_LEASE_MINUTES, JOB_RETRY_MINUTES, LEAGUE_MIN_MATCHES, MAX_LEGS_PER_LEAGUE, MIN_LEG_ODDS, MIN_TICKET_LEGS, MODEL_METHOD,
   isPickFilterActive, parsePickFilter, QUOTE_MAX_AGE_MINUTES, resolveDayRange, SCORELINE_MAX_GOALS, SELECTION_WINDOW_HOURS, TEAM_MIN_MATCHES,
   TICKET_TIERS, utcToday, type CalibrationBucket, type CandidateCohortPerformance, type DayRange, type PickFilter, type PickPerformance
@@ -64,7 +64,8 @@ const PARAMETER_GROUPS: Array<{ title: string; rows: Parameter[] }> = [
       { name: "EV haircut", value: pct(EV_HAIRCUT, 0), effect: `Conservative EV = p × (1 − ${EV_HAIRCUT}) × odds − 1 must be above zero.` },
       { name: "Quote freshness", value: `${QUOTE_MAX_AGE_MINUTES} min`, effect: "A leg's price must be captured before kickoff and no older than this when the ticket is built." },
       { name: "Market consensus", value: "Proportional de-vig, averaged", effect: "Each bookmaker's full market is de-vigged; partial markets are skipped so a missing outcome is not priced as impossible." },
-      { name: "Confidence score", value: "min(model, consensus) ÷ max × 100", effect: "Agreement between the model and the market; tickets require a minimum score." }
+      { name: "Confidence score", value: "min(model, consensus) ÷ max × 100", effect: "Agreement between the model and the market; tickets require a minimum score." },
+      { name: "Away match winner (paper control)", value: `No Value/High; Standard p ≥ ${pct(AWAY_WIN_STANDARD_MIN_MODEL_PROBABILITY, 0)}, odds < ${AWAY_WIN_STANDARD_MAX_ODDS_EXCLUSIVE.toFixed(2)}`, effect: "Prospective restriction after the observed Away-leg shortfall; every tier's allow/reject result is retained in the candidate snapshot." }
     ]
   },
   {
@@ -461,7 +462,7 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
 
       <section id="candidates" className="analysis-section" aria-labelledby="candidates-title">
         <h2 id="candidates-title">Candidate universe</h2>
-        <p className="meta">Prospective paper comparison only. Each included publication stores every contemporaneous prediction-plus-complete-market candidate, its captured quote, model and consensus probabilities, confidence, conservative EV and leg-level gate result. “Eligible not selected” cleared those leg-level gates but was not used in the published accumulator; it is not a simulated replacement ticket. Profit stakes one unit per finished leg at its captured price, so it tests legs rather than claiming accumulator returns.</p>
+        <p className="meta">Prospective paper comparison only. Each included publication stores every contemporaneous prediction-plus-complete-market candidate, its captured quote, model and consensus probabilities, confidence, conservative EV and tier-policy gate result. “Eligible not selected” was allowed in at least one tier but was not used in the published accumulator; it is not a simulated replacement ticket. Profit stakes one unit per finished leg at its captured price, so it tests legs rather than claiming accumulator returns.</p>
         {tickets.candidateUniverse.snapshotRuns === 0 ? <div className="notice">No ticket in {period} has a captured candidate universe yet. This is intentional: existing tickets are not reconstructed using hindsight. The report begins with publications after the candidate-universe migration is deployed.</div> : <>
           <div className="analysis-kpis compact">
             <article><small>Publication snapshots</small><strong>{count(tickets.candidateUniverse.snapshotRuns)}</strong><span>immutable candidate universes</span></article>

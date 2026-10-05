@@ -1,5 +1,5 @@
 import { db } from "@highodds/db";
-import { buildTicketsAround, conservativeExpectedValue, devigProbability, isGuardedAwayWin, legEligibility, modelImpliedEdge, quoteIsFresh, SELECTION_WINDOW_HOURS, type CandidateLeg, type SupportedMarket, type TicketTier } from "@highodds/core";
+import { buildTicketsAround, conservativeExpectedValue, devigProbability, isGuardedAwayWin, legEligibility, legEligibilityForTier, modelImpliedEdge, quoteIsFresh, SELECTION_WINDOW_HOURS, TICKET_TIERS, type CandidateLeg, type SupportedMarket, type TicketTier } from "@highodds/core";
 import { generatePredictions } from "./predict.js";
 
 const SELECTION_WINDOW_MS = SELECTION_WINDOW_HOURS * 60 * 60 * 1000;
@@ -8,7 +8,7 @@ const MARKET_OUTCOME_COUNT: Record<SupportedMarket, number> = { MATCH_WINNER: 3,
 const TOTAL_GOALS_RULE_KEY = "TOTAL_GOALS_ODDS_1_80_V1";
 const TOTAL_GOALS_RULE_MIN_ODDS = 1.8;
 /** Bump only when the candidate construction or selection policy changes materially. */
-const CANDIDATE_SNAPSHOT_POLICY_VERSION = "acca-candidate-universe-v1";
+const CANDIDATE_SNAPSHOT_POLICY_VERSION = "acca-away-tier-guard-v2";
 
 export interface PublishResult { published: number; predicted: number; predictionsSkipped: number; }
 
@@ -167,6 +167,7 @@ export async function publishTickets(now: Date): Promise<PublishResult> {
             consensusProbability: candidate.consensusProbability, confidenceScore: candidate.confidenceScore,
             conservativeExpectedValue: candidate.conservativeExpectedValue,
             baseEligibilityReason: legEligibility(candidate, now).reason ?? null,
+            tierEligibility: Object.fromEntries(TICKET_TIERS.map((tier) => [tier.key, legEligibilityForTier(candidate, tier, now).reason ?? null])),
             selected: selection !== undefined, ticketTier: selection?.tier ?? null,
             confidenceThreshold: selection?.confidenceThreshold ?? null
           };

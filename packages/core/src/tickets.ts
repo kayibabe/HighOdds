@@ -18,6 +18,14 @@ export const AWAY_WIN_GUARD_MIN_ODDS = 1.8;
 export const AWAY_WIN_GUARD_MAX_ODDS_EXCLUSIVE = 2;
 export const AWAY_WIN_GUARD_MIN_MODEL_IMPLIED_EDGE = 0.05;
 
+/**
+ * Paper-only response to the prospective leg review. It intentionally removes Away match-winner
+ * legs from the higher accumulator tiers and rejects their long-shot Standard-tier tail. This is
+ * a pre-declared observation rule, not a claim that the retained segment has an edge.
+ */
+export const AWAY_WIN_STANDARD_MIN_MODEL_PROBABILITY = 0.35;
+export const AWAY_WIN_STANDARD_MAX_ODDS_EXCLUSIVE = 4;
+
 export function modelImpliedEdge(leg: Pick<CandidateLeg, "modelProbability" | "decimalOdds">): number {
   return leg.modelProbability - impliedProbability(leg.decimalOdds);
 }
@@ -35,6 +43,17 @@ export function legEligibility(leg: CandidateLeg, now: Date): EligibilityResult 
   if (leg.conservativeExpectedValue <= 0) return { eligible: false, reason: "NON_POSITIVE_CONSERVATIVE_EV" };
   if (!quoteIsFresh(leg, leg.kickoff, now)) return { eligible: false, reason: "STALE_OR_POST_KICKOFF_QUOTE" };
   return { eligible: true };
+}
+
+/** Tier-specific layer on top of the universal leg gates, retained in candidate snapshots. */
+export function legEligibilityForTier(leg: CandidateLeg, tier: TicketTier, now: Date): EligibilityResult {
+  const base = legEligibility(leg, now);
+  if (!base.eligible) return base;
+  if (leg.market !== "MATCH_WINNER" || leg.selection !== "AWAY") return base;
+  if (tier.key === "VALUE" || tier.key === "HIGH") return { eligible: false, reason: "AWAY_WIN_NOT_ALLOWED_IN_VALUE_HIGH" };
+  if (leg.modelProbability < AWAY_WIN_STANDARD_MIN_MODEL_PROBABILITY) return { eligible: false, reason: "AWAY_WIN_STANDARD_MODEL_PROBABILITY_BELOW_35PCT" };
+  if (leg.decimalOdds >= AWAY_WIN_STANDARD_MAX_ODDS_EXCLUSIVE) return { eligible: false, reason: "AWAY_WIN_STANDARD_ODDS_4_00_OR_HIGHER" };
+  return base;
 }
 
 function product(legs: CandidateLeg[]): number { return legs.reduce((value, leg) => value * leg.decimalOdds, 1); }
@@ -73,7 +92,7 @@ export interface BuildTicketsOptions {
 
 function draftAt(candidates: CandidateLeg[], bookmakerPriority: string[], tier: TicketTier, threshold: number, now: Date, excluded: Set<string>): TicketDraft | undefined {
   for (const bookmakerId of bookmakerPriority) {
-    const viable = candidates.filter((candidate) => candidate.bookmakerId === bookmakerId && candidate.confidenceScore >= threshold && !excluded.has(candidate.fixtureId) && legEligibility(candidate, now).eligible)
+    const viable = candidates.filter((candidate) => candidate.bookmakerId === bookmakerId && candidate.confidenceScore >= threshold && !excluded.has(candidate.fixtureId) && legEligibilityForTier(candidate, tier, now).eligible)
       .sort((a, b) => b.conservativeExpectedValue - a.conservativeExpectedValue);
     const legs = chooseLegs(viable, tier);
     if (legs) return { tier, bookmakerId, legs, combinedOdds: product(legs), confidenceThreshold: threshold, relaxed: threshold < CONFIDENCE_THRESHOLDS[0] };
