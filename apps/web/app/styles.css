@@ -562,6 +562,32 @@ h2 { font-size: 1.25rem; line-height: 1.3; letter-spacing: -0.015em; margin: 30p
 .analysis-kpis strong { display: block; margin: 6px 0 2px; font-size: 1.35rem; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .analysis-kpis span { display: block; color: var(--text2); font-size: 12px; }
 .analysis-kpis.compact strong { font-size: 1.1rem; }
+.today-summary-head { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin: 28px 0 8px; }
+.today-summary-head h2 { margin: 4px 0 0; font-size: 1.35rem; }
+.today-summary-head > p { max-width: 420px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.today-summary-kpis { margin-top: 12px; }
+.today-summary-kpis article { min-height: 104px; }
+.decision-guide { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 12px 0 26px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-muted); color: var(--muted); font-size: 12px; }
+.decision-guide strong { color: var(--text); margin-right: 4px; }
+.decision-guide span { display: inline-flex; align-items: center; gap: 6px; }
+.decision-badge { display: inline-flex; align-items: center; min-height: 20px; padding: 2px 7px; border-radius: 999px; font-size: 10px; letter-spacing: .04em; font-weight: 800; }
+.decision-badge.bet { color: var(--positive); background: color-mix(in srgb, var(--positive) 12%, var(--surface)); }
+.decision-badge.watch { color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, var(--surface)); }
+.decision-badge.pass { color: var(--negative); background: color-mix(in srgb, var(--negative) 10%, var(--surface)); }
+.evidence-list { margin: 10px 0 22px; padding-left: 20px; color: var(--text2); font-size: 13px; line-height: 1.55; }
+.evidence-list li + li { margin-top: 7px; }
+.evidence-list strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.risk-list { color: var(--muted); }
+.match-decision { margin: 24px 0 32px; padding: 18px; border: 1px solid var(--border-strong); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow-sm); }
+.match-decision-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.match-decision-heading h3 { margin: 4px 0 0; font-size: 1.25rem; }
+.match-decision-verdict { margin: 12px 0 18px; color: var(--text2); }
+.match-decision-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.match-decision-grid > div { padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-muted); }
+.match-decision-grid small, .match-decision-notes strong { display: block; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.match-decision-grid strong { display: block; margin-top: 5px; color: var(--text); font-size: 14px; overflow-wrap: anywhere; }
+.match-decision-notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.match-decision-notes p { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .analysis-section { margin-top: 44px; scroll-margin-top: 72px; }
 .analysis-section > h2 { margin-top: 0; padding-top: 18px; border-top: 1px solid var(--border); }
 .analysis-table { margin: 12px 0 22px; }
@@ -867,6 +893,10 @@ button.theme-btn, a.theme-btn { width: auto; min-width: 42px; margin: 0; padding
   .flow-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ticket-board-heading { display: block; padding: 16px; }
   .ticket-board-heading > p { margin-top: 8px; }
+  .today-summary-head { display: block; }
+  .today-summary-head > p { margin-top: 8px; }
+  .match-decision-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .match-decision-notes { grid-template-columns: 1fr; gap: 12px; }
   .ticket-cards { grid-template-columns: 1fr; }
   .premium-ticket-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .premium-leg-trigger { grid-template-columns: minmax(0, 1fr) auto auto; padding: 14px 14px; }

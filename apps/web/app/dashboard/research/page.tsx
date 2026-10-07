@@ -9,6 +9,7 @@ import { FixtureCalendar } from "../../fixture-calendar";
 import TicketBoard from "../ticket-board";
 import TotalGoalsRule from "../total-goals-rule";
 import ModelPicks from "../model-picks";
+import TodaySummary from "../today-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export default async function DailyResearchPage({ searchParams }: {
     <h1>Today&apos;s Paper Tickets</h1>
     <DayNav basePath="/dashboard/research" day={day} today={today} allowFuture />
     <p className="page-intro">Published paper tickets for <strong>{formatDay(day)}</strong>. Supporting model signals remain available below; fixture times are Africa/Blantyre.</p>
+    <TodaySummary tickets={tickets} picks={picks} />
     {!tickets.length && <div className="notice">No paper ticket was published for {formatDay(day)}. The signals below remain research evidence.</div>}
     <TicketBoard tickets={tickets} />
     <details className="secondary-evidence"><summary>Upcoming match calendar</summary>

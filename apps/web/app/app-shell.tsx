@@ -14,8 +14,8 @@ type NavGroup = { label: string; icon: IconName; children: NavItem[] };
 type IconName = "home" | "sparkles" | "chart" | "shield" | "login" | "search" | "gauge";
 
 const WORKFLOW: NavGroup[] = [
-  { label: "Today", icon: "sparkles", children: [
-    { href: "/dashboard/research", label: "Today’s Paper Tickets", icon: "sparkles", hint: "Published paper tickets and supporting signals" },
+  { label: "Betting desk", icon: "sparkles", children: [
+    { href: "/dashboard/research", label: "Today’s Intelligence", icon: "sparkles", hint: "Published paper tickets and supporting signals" },
     { href: "/dashboard/high-probability", label: "Forecast Finder", icon: "chart", hint: "Filter forecasts with historical calibration evidence" }
   ] },
   { label: "Investigate", icon: "search", children: [

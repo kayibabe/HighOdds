@@ -192,6 +192,29 @@ export default async function ResearchWorkspace({ searchParams, view }: {
     orderBy: { ticketVersion: { tier: "asc" } }
   }) : [];
 
+  const bestMarketResult = marketResults
+    .filter((item) => item.pick)
+    .sort((a, b) => Number(b.pick!.probability) - Number(a.pick!.probability))[0];
+  const bestPick = bestMarketResult?.pick;
+  const bestQuote = selectedFixture && bestPick
+    ? resolveResearchQuote(selectedFixture.quotes, {
+      marketKey: bestMarketResult.market, selection: bestPick.selection, kickoff: selectedFixture.kickoff,
+      mode: "historical"
+    })
+    : null;
+  const bestOdds = bestQuote ? Number(bestQuote.decimalOdds) : null;
+  const bestImplied = bestOdds && bestOdds > 0 ? 1 / bestOdds : null;
+  const bestEdge = bestImplied === null || !bestPick ? null : Number(bestPick.probability) - bestImplied;
+  const publishedBest = bestPick && selectedFixture
+    ? ticketLegs.some((leg) => leg.marketKey === bestMarketResult!.market && leg.selection === bestPick.selection)
+    : false;
+  const verdict = publishedBest ? "BET" : bestPick ? "WATCH" : "PASS";
+  const verdictReason = verdict === "BET"
+    ? "This selection is present on a published paper ticket."
+    : verdict === "WATCH"
+      ? "A model signal exists, but it is not a published paper selection."
+      : "No pre-kickoff model selection is available for this fixture.";
+
   const candidateResults = screenCandidates.map((candidate) => {
     const fixture = candidate.fixture;
     const finished = fixture.status === "FINISHED" && fixture.homeGoals !== null && fixture.awayGoals !== null;
@@ -310,6 +333,26 @@ export default async function ResearchWorkspace({ searchParams, view }: {
         <p className="eyebrow">{selectedFixture.competition.name} · {dateTime(selectedFixture.kickoff)}</p>
         <h2>{selectedFixture.homeTeam.name} vs {selectedFixture.awayTeam.name}</h2>
         <p className="meta">Fixture status: {selectedFixture.status}{selectedFixture.statusCode ? ` (${selectedFixture.statusCode})` : ""}. Last received {dateTime(selectedFixture.receivedAt)}.</p>
+
+        <section className="match-decision" aria-labelledby="match-decision-title">
+          <div className="match-decision-heading">
+            <div><p className="eyebrow">EXECUTIVE BETTING SUMMARY</p><h3 id="match-decision-title">Model verdict</h3></div>
+            <span className={`decision-badge ${verdict.toLowerCase()}`}>{verdict}</span>
+          </div>
+          <p className="match-decision-verdict">{verdictReason} This is research evidence, not an instruction to stake money.</p>
+          {bestPick ? <div className="match-decision-grid">
+            <div><small>Recommended market</small><strong>{marketLabel(bestMarketResult!.market)} · {selectionLabel(bestPick.selection)}</strong></div>
+            <div><small>Model probability</small><strong>{pct(Number(bestPick.probability))}</strong></div>
+            <div><small>Captured odds</small><strong>{bestOdds === null ? "Unavailable" : bestOdds.toFixed(2)}</strong></div>
+            <div><small>Implied probability</small><strong>{bestImplied === null ? "Unavailable" : pct(bestImplied)}</strong></div>
+            <div><small>Model fair odds</small><strong>{Number(bestPick.probability) > 0 ? (1 / Number(bestPick.probability)).toFixed(2) : "Unavailable"}</strong></div>
+            <div><small>Edge</small><strong>{bestEdge === null ? "Unavailable" : `${bestEdge >= 0 ? "+" : ""}${(bestEdge * 100).toFixed(1)} pp`}</strong></div>
+          </div> : <div className="notice">No pre-kickoff model selection is stored for this fixture. PASS is a data state, not a claim that every market was evaluated.</div>}
+          {bestPick && <div className="match-decision-notes">
+            <div><strong>Why this is the leading signal</strong><p>It is the highest stored probability among the supported markets for this fixture, subject to the pre-kickoff and model-training cutoff checks.</p></div>
+            <div><strong>Risks and limits</strong><p>{bestQuote ? "The price is a captured historical quote and may not be available now." : "No eligible captured quote is available, so value and executable pricing cannot be verified."} A single fixture is not enough to establish reliability.</p></div>
+          </div>}
+        </section>
 
         <section className="research-result" aria-labelledby="research-result-title">
           <h3 id="research-result-title">Match result</h3>

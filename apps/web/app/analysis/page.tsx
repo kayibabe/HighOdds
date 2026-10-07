@@ -499,6 +499,7 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Pro
             </table>
           </div>
           <p className="meta">CLV is now unavailable unless a strictly later same-bookmaker quote was captured before kickoff. Model edge is probability × odds − 1 before the {pct(EV_HAIRCUT, 0)} haircut. Confidence thresholds used: {tickets.thresholds.map((row) => `${row.threshold} (${row.count})`).join(", ")}.</p>
+          <div className="notice" role="status">Accumulator correlation review: {count(tickets.correlation.flaggedTickets)} of {count(tickets.correlation.ticketsChecked)} tickets contain multiple selections from the same fixture. {tickets.correlation.flaggedPairs.length === 0 ? "No same-fixture correlation flags were found in this period." : "These combinations should not be interpreted as independent legs without a deliberate joint-probability model."}</div>
         </>}
       </section>
 

@@ -195,7 +195,19 @@ function DetailPanel({ selected, onClose }: { selected: SelectedLeg; onClose: ()
               <div><dt>Ticket lock</dt><dd>{utcTime(ticket.lockAt)}</dd></div>
               <div><dt>Confidence floor</dt><dd>{ticket.confidenceThreshold}%</dd></div>
             </dl>
-            <p>This leg belongs to a published paper ticket. The confidence floor is a ticket selection rule, not this match&apos;s win probability.</p>
+            <h3>Why this selection was published</h3>
+            <ul className="evidence-list">
+              <li>Model estimate: <strong>{pct(leg.probability)}</strong> at publication.</li>
+              <li>{implied === null ? "Bookmaker implied probability is unavailable, so value cannot be verified." : <>Model minus captured implied probability: <strong>{gap! >= 0 ? "+" : ""}{gap!.toFixed(1)} percentage points</strong>.</>}</li>
+              <li>{leg.consensusProbability === null ? "Cross-bookmaker consensus was not recorded for this leg." : <>Recorded market consensus: <strong>{pct(leg.consensusProbability)}</strong>.</>}</li>
+              <li>{leg.agreementScore === null ? "Model/market agreement is unavailable." : <>Recorded model/market agreement: <strong>{leg.agreementScore.toFixed(0)}/100</strong>.</>}</li>
+            </ul>
+            <h3>Risks and limits</h3>
+            <ul className="evidence-list risk-list">
+              <li>This is a paper selection, not an executable or guaranteed bet.</li>
+              <li>The snapshot is point-in-time; current odds, lineups, injuries, and context may differ.</li>
+              <li>The ticket confidence floor is a publishing rule, not this match&apos;s win probability.</li>
+            </ul>
           </>}
           {view === "probability" && <>
             <h3>Probability evidence</h3>

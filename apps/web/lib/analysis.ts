@@ -335,6 +335,20 @@ export async function loadTicketPerformance(range: DayRange) {
   const settledIds = new Set(tickets.filter((ticket) => ticket.settlements[0] && ticket.settlements[0].outcome !== "PENDING").map((ticket) => ticket.id));
   const quoteCadenceRows = await loadTicketQuoteCadence(tickets.map((ticket) => ticket.id));
   const settledClv = quoteCadenceRows.filter((row) => settledIds.has(row.ticketVersionId)).flatMap((row) => row.clvPercent === null ? [] : [row.clvPercent]);
+  const correlationPairs = tickets.flatMap((ticket) => {
+    const warnings: string[] = [];
+    for (let i = 0; i < ticket.legs.length; i += 1) {
+      for (let j = i + 1; j < ticket.legs.length; j += 1) {
+        const left = ticket.legs[i]!;
+        const right = ticket.legs[j]!;
+        if (left.fixtureId !== right.fixtureId) continue;
+        const markets = new Set([left.marketKey, right.marketKey]);
+        if (markets.has("TOTAL_GOALS") && markets.has("BTTS")) warnings.push(`${left.fixtureId}: total goals + BTTS`);
+        else warnings.push(`${left.fixtureId}: multiple markets on one fixture`);
+      }
+    }
+    return warnings.map((warning) => ({ ticketId: ticket.id, warning }));
+  });
   const snapshotRunIds = [...new Set(tickets.flatMap((ticket) => ticket.candidateSnapshotRunId ? [ticket.candidateSnapshotRunId] : []))];
   const snapshots = snapshotRunIds.length === 0 ? [] : await db.candidateSnapshot.findMany({
     where: { runId: { in: snapshotRunIds } },
@@ -363,6 +377,7 @@ export async function loadTicketPerformance(range: DayRange) {
     thresholds: [...thresholds.entries()].sort((a, b) => b[0] - a[0]).map(([threshold, count]) => ({ threshold, count })),
     clv: settledClv.length === 0 ? null : settledClv.reduce((sum, value) => sum + value, 0) / settledClv.length,
     quoteCadence: summarizeQuoteCadence(quoteCadenceRows),
-    candidateUniverse: { snapshotRuns: snapshotRunIds.length, ...summarizeCandidateUniverse(candidateUniverseRows) }
+    candidateUniverse: { snapshotRuns: snapshotRunIds.length, ...summarizeCandidateUniverse(candidateUniverseRows) },
+    correlation: { ticketsChecked: tickets.length, flaggedTickets: new Set(correlationPairs.map((value) => value.ticketId)).size, flaggedPairs: correlationPairs.map((value) => value.warning) }
   };
 }

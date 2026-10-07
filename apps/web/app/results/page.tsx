@@ -150,6 +150,7 @@ export default async function ResultsPage({ searchParams }: { searchParams: Prom
         <article><h2>Brier score</h2><p>{modelBrier === null ? "—" : modelBrier.toFixed(4)}</p></article>
         <article><h2>Excluded rows</h2><p>{excludedCount} (late forecast, model lookahead, or duplicate history)</p></article>
       </div>
+      {scored.length < 30 && <div className="notice">Small sample warning: only {scored.length} walk-forward predictions are scored in this period. Treat hit rate and Brier results as descriptive, not reliable evidence of strategy quality.</div>}
       <p className="meta">Lower Brier is better; this pooled score can hide differences between markets and competitions. Market and competition breakdowns should follow once the evidence volume supports them.</p>
       </details>
     </section>
