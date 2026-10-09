@@ -13,6 +13,15 @@ type NavItem = { href: string; label: string; icon: IconName; hint: string };
 type NavGroup = { label: string; icon: IconName; children: NavItem[] };
 type IconName = "home" | "sparkles" | "chart" | "shield" | "login" | "search" | "gauge";
 
+function BrandMark() {
+  return <svg className="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+    <rect width="64" height="64" rx="18" fill="#0b1626" />
+    <path d="M20 18v28M44 18v28" fill="none" stroke="#f5fbff" strokeWidth="7" strokeLinecap="round" />
+    <path d="M20 33h24" fill="none" stroke="#35d5e8" strokeWidth="7" strokeLinecap="round" />
+    <circle cx="44" cy="20" r="4" fill="#35d5e8" />
+  </svg>;
+}
+
 const WORKFLOW: NavGroup[] = [
   { label: "Betting desk", icon: "sparkles", children: [
     { href: "/dashboard/research", label: "Today’s Intelligence", icon: "sparkles", hint: "Published paper tickets and supporting signals" },
@@ -50,10 +59,6 @@ function isActive(pathname: string, href: string): boolean {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function BrandMark() {
-  return <span className="brand-mark" aria-hidden="true">H</span>;
-}
-
 export default function AppShell({ email, isAdmin, children }: Readonly<{ email: string | null; isAdmin: boolean; children: ReactNode }>) {
   const pathname = usePathname() ?? "/";
   const router = useRouter();
@@ -82,7 +87,7 @@ export default function AppShell({ email, isAdmin, children }: Readonly<{ email:
           <BrandMark />
           <span className="brand-copy">
             <span className="brand-name">HighOdds</span>
-            <span className="brand-tagline">Evidence-led paper analysis</span>
+            <span className="brand-tagline">See the signal. Keep the evidence.</span>
           </span>
         </a>
         <nav className="sidebar-nav" aria-label="Primary navigation">

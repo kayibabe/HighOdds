@@ -3,7 +3,10 @@ import { auth } from "../auth";
 import AppShell from "./app-shell";
 import "./styles.css";
 
-export const metadata: Metadata = { title: "HighOdds | Paper football analysis", description: "Evidence-led football paper tickets." };
+export const metadata: Metadata = {
+  title: "HighOdds | Football research, with the evidence in view",
+  description: "See the signal. Keep the evidence. Review football forecasts, captured prices, and outcomes in one research workspace.",
+};
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const session = await auth();

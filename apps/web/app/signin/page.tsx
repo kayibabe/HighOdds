@@ -18,8 +18,13 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
           </div>
           <div className="auth-form-panel">
             <a className="auth-card-brand" href="/" aria-label="HighOdds home">
-              <span className="brand-mark" aria-hidden="true">H</span>
-              <small>Evidence-led paper analysis</small>
+              <svg className="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+                <rect width="64" height="64" rx="18" fill="#0b1626" />
+                <path d="M20 18v28M44 18v28" fill="none" stroke="#f5fbff" strokeWidth="7" strokeLinecap="round" />
+                <path d="M20 33h24" fill="none" stroke="#35d5e8" strokeWidth="7" strokeLinecap="round" />
+                <circle cx="44" cy="20" r="4" fill="#35d5e8" />
+              </svg>
+              <small>See the signal. Keep the evidence.</small>
             </a>
             <h2 id="auth-page-title">Sign in to HighOdds</h2>
             <p>Subscribers receive an email magic link after an administrator has activated access.</p>

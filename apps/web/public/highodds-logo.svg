@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="88" viewBox="0 0 440 88" role="img" aria-labelledby="title desc">
+  <title id="title">HighOdds</title>
+  <desc id="desc">See the signal. Keep the evidence.</desc>
+  <rect x="4" y="12" width="64" height="64" rx="18" fill="#0b1626"/>
+  <path d="M24 30v28M48 30v28" fill="none" stroke="#f5fbff" stroke-width="7" stroke-linecap="round"/>
+  <path d="M24 45h24" fill="none" stroke="#35d5e8" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="48" cy="32" r="4" fill="#35d5e8"/>
+  <text x="84" y="47" fill="#0b1626" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="31" font-weight="750" letter-spacing="-1.2">HighOdds</text>
+  <text x="85" y="68" fill="#1456a0" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="12" font-weight="600" letter-spacing=".1">See the signal. Keep the evidence.</text>
+</svg>
